@@ -1,0 +1,18 @@
+# Test and demo dependencies (moto, pytest), pinned on top of the runtime set.
+-r requirements.txt
+certifi==2026.6.17
+cffi==2.1.1
+charset-normalizer==3.5.2
+cryptography==50.0.2
+idna==3.20
+iniconfig==2.3.1
+moto==5.2.4
+packaging==26.3
+pluggy==1.7.0
+py-partiql-parser==0.6.3
+pycparser==3.11
+pytest==9.1.1
+requests==2.34.2
+responses==0.26.3
+Werkzeug==3.1.9
+xmltodict==1.0.4
