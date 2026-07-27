@@ -213,3 +213,96 @@ def password_policy(run: CheckRun) -> None:
         )
     else:
         run.failed(resource, "The password policy does not prevent password reuse", evidence, cis=("1.9",))
+
+
+# --- access keys and unused credentials ---------------------------------------
+
+
+def active_keys(row: dict[str, str]) -> list[int]:
+    return [n for n in (1, 2) if row.get(f"access_key_{n}_active") == "true"]
+
+
+@check(
+    id="iam-access-key-rotation",
+    title="Active access keys are rotated within 90 days",
+    service="iam",
+    severity=Severity.MEDIUM,
+    scope=Scope.GLOBAL,
+    cis=("1.14",),
+    description="Long-lived keys build up exposure: the older a key, the more places it may have leaked to.",
+    console=(
+        "IAM > Users > choose the user > Security credentials. Create a new access key, move every "
+        "application to it, make the old key inactive, then delete it once nothing breaks."
+    ),
+    cli=(
+        "aws iam create-access-key --user-name <USER>\n"
+        "aws iam update-access-key --user-name <USER> --access-key-id <OLD_KEY_ID> --status Inactive\n"
+        "aws iam delete-access-key --user-name <USER> --access-key-id <OLD_KEY_ID>"
+    ),
+)
+def access_key_rotation(run: CheckRun) -> None:
+    for row in credential_report(run):
+        for n in active_keys(row):
+            rotated = report_time(row.get(f"access_key_{n}_last_rotated"))
+            if rotated is None:
+                continue
+            age = days_since(run, rotated)
+            evidence = {"key": f"access_key_{n}", "last_rotated": rotated.isoformat(), "age_days": age}
+            who = "root user" if row["user"] == ROOT_ROW else f"user {row['user']}"
+            if age > KEY_ROTATION_DAYS:
+                run.failed(row["arn"], f"Access key {n} of {who} is {age} days old", evidence)
+            else:
+                run.passed(row["arn"], f"Access key {n} of {who} is {age} days old", evidence)
+
+
+def _stale(run: CheckRun, last_used: datetime | None, fallback: datetime | None) -> int | None:
+    """Days since a credential was last used (or set, if never used), if over the limit."""
+    reference = last_used or fallback
+    if reference is None:
+        return None
+    days = days_since(run, reference)
+    return days if days > UNUSED_CREDENTIAL_DAYS else None
+
+
+@check(
+    id="iam-unused-credentials",
+    title="Credentials unused for 45 days are disabled",
+    service="iam",
+    severity=Severity.MEDIUM,
+    scope=Scope.GLOBAL,
+    cis=("1.12",),
+    description="Passwords and keys nobody uses are pure risk: they can still be stolen but nobody would notice.",
+    console=(
+        "IAM > Users > choose the user > Security credentials. Make unused access keys inactive "
+        "(then delete them) and remove the console password if the user no longer signs in."
+    ),
+    cli=(
+        "aws iam update-access-key --user-name <USER> --access-key-id <KEY_ID> --status Inactive\n"
+        "aws iam delete-login-profile --user-name <USER>"
+    ),
+)
+def unused_credentials(run: CheckRun) -> None:
+    for row in user_rows(run):
+        created = report_time(row.get("user_creation_time"))
+        stale: list[str] = []
+        evaluated = False
+        if row.get("password_enabled") == "true":
+            evaluated = True
+            last_used = report_time(row.get("password_last_used"))
+            set_at = report_time(row.get("password_last_changed")) or created
+            days = _stale(run, last_used, set_at)
+            if days is not None:
+                stale.append(f"console password {'unused' if last_used else 'never used'} for {days} days")
+        for n in active_keys(row):
+            evaluated = True
+            last_used = report_time(row.get(f"access_key_{n}_last_used_date"))
+            set_at = report_time(row.get(f"access_key_{n}_last_rotated")) or created
+            days = _stale(run, last_used, set_at)
+            if days is not None:
+                stale.append(f"access key {n} {'unused' if last_used else 'never used'} for {days} days")
+        if not evaluated:
+            continue
+        if stale:
+            run.failed(row["arn"], f"User {row['user']} has stale credentials: {'; '.join(stale)}", {"stale": stale})
+        else:
+            run.passed(row["arn"], f"User {row['user']} has used every active credential in the last 45 days")
