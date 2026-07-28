@@ -1,4 +1,4 @@
-"""IAM checks."""
+"""IAM checks: the root user, console users, access keys and admin access."""
 
 from __future__ import annotations
 
@@ -6,12 +6,14 @@ import csv
 import io
 import time
 from datetime import datetime
+from typing import Any
 
 from botocore.exceptions import ClientError
 
-from ..context import CheckRun
+from ..context import CheckRun, paginate
 from ..errors import error_code
 from ..models import Severity
+from ..policy import grants_full_admin, load_document
 from ..registry import Scope, check
 
 ROOT_ROW = "<root_account>"
@@ -306,3 +308,58 @@ def unused_credentials(run: CheckRun) -> None:
             run.failed(row["arn"], f"User {row['user']} has stale credentials: {'; '.join(stale)}", {"stale": stale})
         else:
             run.passed(row["arn"], f"User {row['user']} has used every active credential in the last 45 days")
+
+
+# --- admin access attached directly to users -----------------------------------
+
+
+def _policy_document(run: CheckRun, policy_arn: str) -> dict[str, Any]:
+    def load() -> dict[str, Any]:
+        iam = run.client("iam")
+        version = iam.get_policy(PolicyArn=policy_arn)["Policy"]["DefaultVersionId"]
+        document = iam.get_policy_version(PolicyArn=policy_arn, VersionId=version)["PolicyVersion"]["Document"]
+        return load_document(document)
+
+    return run.scan.cached(f"iam:policy:{policy_arn}", load)
+
+
+@check(
+    id="iam-user-admin-policy",
+    title="No IAM user has full admin attached directly",
+    service="iam",
+    severity=Severity.HIGH,
+    scope=Scope.GLOBAL,
+    description=(
+        "Users with AdministratorAccess or a '*:*' policy attached directly are hard to audit and, "
+        "if their keys leak, give away the whole account."
+    ),
+    console=(
+        "IAM > Users > choose the user > Permissions. Remove the admin policy and grant what the user "
+        "needs through a group or a role they assume, ideally with MFA required."
+    ),
+    cli=(
+        "aws iam detach-user-policy --user-name <USER> --policy-arn arn:aws:iam::aws:policy/AdministratorAccess\n"
+        "aws iam delete-user-policy --user-name <USER> --policy-name <INLINE_POLICY>"
+    ),
+)
+def user_admin_policy(run: CheckRun) -> None:
+    iam = run.client("iam")
+    admin_arn = f"arn:{run.scan.partition}:iam::aws:policy/AdministratorAccess"
+    for user in paginate(iam, "list_users", "Users"):
+        name, arn = user["UserName"], user["Arn"]
+        with run.guard(arn):
+            reasons = []
+            for attached in paginate(iam, "list_attached_user_policies", "AttachedPolicies", UserName=name):
+                policy_arn = attached["PolicyArn"]
+                if policy_arn == admin_arn:
+                    reasons.append("AdministratorAccess (AWS managed)")
+                elif ":aws:policy/" not in policy_arn and grants_full_admin(_policy_document(run, policy_arn)):
+                    reasons.append(f"{attached['PolicyName']} (customer managed, allows *:*)")
+            for policy_name in paginate(iam, "list_user_policies", "PolicyNames", UserName=name):
+                document = iam.get_user_policy(UserName=name, PolicyName=policy_name)["PolicyDocument"]
+                if grants_full_admin(load_document(document)):
+                    reasons.append(f"{policy_name} (inline, allows *:*)")
+            if reasons:
+                run.failed(arn, f"User {name} has full admin attached directly: {', '.join(reasons)}", {"policies": reasons})
+            else:
+                run.passed(arn, f"User {name} has no full admin policy attached directly")
