@@ -34,3 +34,4 @@ aws_security_audit = ["templates/*.j2"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["managed_policies: load AWS managed IAM policies into moto"]
