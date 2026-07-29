@@ -41,18 +41,33 @@ def fake_aws_env(monkeypatch):
 
 
 @pytest.fixture
-def aws():
-    with mock_aws():
+def aws(request):
+    # Loading AWS managed policies into moto is slow, so only tests marked
+    # with @pytest.mark.managed_policies get them.
+    config = None
+    if request.node.get_closest_marker("managed_policies"):
+        config = {"iam": {"load_aws_managed_policies": True}}
+    with mock_aws(config=config):
         yield
 
 
 @pytest.fixture
-def scan(aws):
+def make_ctx(aws):
+    """Build a ScanContext on a fresh boto3 session, optionally with the clock moved forward."""
+
+    def _make(days_later: int = 0) -> ScanContext:
+        now = datetime.now(timezone.utc) + timedelta(days=days_later)
+        return ScanContext.from_session(boto3.Session(region_name=REGION), now=now)
+
+    return _make
+
+
+@pytest.fixture
+def scan(make_ctx):
     """Run some checks against the moto account and return the ScanResult."""
 
-    def _scan(*check_ids: str, regions=(REGION,), days_later: int = 0) -> ScanResult:
-        now = datetime.now(timezone.utc) + timedelta(days=days_later)
-        ctx = ScanContext.from_session(boto3.Session(region_name=REGION), now=now)
+    def _scan(*check_ids: str, regions=(REGION,), days_later: int = 0, ctx: ScanContext | None = None) -> ScanResult:
+        ctx = ctx or make_ctx(days_later)
         checks = [get_check(c) for c in check_ids]
         return run_scan(ctx, checks, list(regions), max_workers=4)
 
