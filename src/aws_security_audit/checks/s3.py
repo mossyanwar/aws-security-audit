@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from ..context import CheckRun, paginate
 from ..errors import error_code
 from ..models import Severity
+from ..policy import as_list, load_document, public_allow_statements
 from ..registry import Scope, check
 
 PAB_SETTINGS = ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")
@@ -182,6 +183,73 @@ def bucket_pab(run: CheckRun) -> None:
             run.failed(
                 bucket.arn,
                 f"Bucket {bucket.name} is not fully covered by Block Public Access (off: {', '.join(off)})",
+                evidence,
+                region=bucket.region,
+            )
+
+    for_each_bucket(run, one)
+
+
+@check(
+    id="s3-bucket-policy-public",
+    title="No bucket policy allows access to anyone",
+    service="s3",
+    severity=Severity.CRITICAL,
+    scope=Scope.GLOBAL,
+    description=(
+        "A bucket policy statement that allows Principal '*' with no Condition lets anyone on the "
+        "internet perform the listed actions, unless RestrictPublicBuckets is on."
+    ),
+    console=(
+        "S3 > choose the bucket > Permissions > Bucket policy > Edit. Replace Principal '*' with the "
+        "accounts or roles that need access, or add a Condition. For a public website, serve it through "
+        "CloudFront with origin access control instead."
+    ),
+    cli=(
+        "aws s3api get-bucket-policy --bucket <BUCKET> --query Policy --output text > policy.json\n"
+        "# edit policy.json, then:\n"
+        "aws s3api put-bucket-policy --bucket <BUCKET> --policy file://policy.json\n"
+        "# or remove it entirely: aws s3api delete-bucket-policy --bucket <BUCKET>"
+    ),
+)
+def bucket_policy_public(run: CheckRun) -> None:
+    account = _account_settings_or_none(run)
+
+    def one(bucket: Bucket, s3: Any) -> None:
+        try:
+            policy = load_document(s3.get_bucket_policy(Bucket=bucket.name)["Policy"])
+        except ClientError as exc:
+            if error_code(exc) != "NoSuchBucketPolicy":
+                raise
+            run.passed(bucket.arn, f"Bucket {bucket.name} has no bucket policy", region=bucket.region)
+            return
+        public = public_allow_statements(policy)
+        if not public:
+            message = f"Bucket {bucket.name} policy has no unconditioned Principal '*' allow"
+            run.passed(bucket.arn, message, region=bucket.region)
+            return
+        own = _settings(bucket_public_access_block(run, bucket, s3))
+        restricted = own["RestrictPublicBuckets"] or bool(account and account["RestrictPublicBuckets"])
+        evidence = {
+            "public_statements": [
+                {"sid": st.get("Sid"), "actions": as_list(st.get("Action")), "resources": as_list(st.get("Resource"))}
+                for st in public
+            ],
+            "restrict_public_buckets": restricted,
+        }
+        if restricted:
+            run.failed(
+                bucket.arn,
+                f"Bucket {bucket.name} policy allows Principal '*', but RestrictPublicBuckets currently blocks "
+                "access from outside the account",
+                evidence,
+                region=bucket.region,
+                severity=Severity.MEDIUM,
+            )
+        else:
+            run.failed(
+                bucket.arn,
+                f"Bucket {bucket.name} policy allows access to anyone (Principal '*')",
                 evidence,
                 region=bucket.region,
             )
