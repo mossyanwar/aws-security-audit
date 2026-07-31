@@ -1,4 +1,4 @@
-"""EC2 and VPC checks."""
+"""EC2 and VPC checks: security groups, EBS encryption, public images and snapshots, IMDSv2."""
 
 from __future__ import annotations
 
@@ -260,3 +260,42 @@ def public_amis_snapshots(run: CheckRun) -> None:
                 )
     if not public:
         run.passed(run.scan.account_arn, f"No public AMIs or EBS snapshots owned by the account in {run.region}")
+
+
+@check(
+    id="ec2-imdsv2-required",
+    title="EC2 instances require IMDSv2",
+    service="ec2",
+    severity=Severity.MEDIUM,
+    scope=Scope.REGIONAL,
+    cis=("5.6",),
+    description=(
+        "IMDSv1 answers plain GET requests, so a server-side request forgery bug in an app on the "
+        "instance can be used to read the instance role's credentials. IMDSv2 needs a session token."
+    ),
+    console=(
+        "EC2 > Instances > choose the instance > Actions > Instance settings > Modify instance metadata "
+        "options > IMDSv2: Required. Check that the software on the instance uses a recent AWS SDK first."
+    ),
+    cli="aws ec2 modify-instance-metadata-options --instance-id <INSTANCE_ID> --http-tokens required --http-endpoint enabled",
+)
+def imdsv2_required(run: CheckRun) -> None:
+    for reservation in paginate(run.client("ec2"), "describe_instances", "Reservations"):
+        for instance in reservation.get("Instances", []):
+            state = instance.get("State", {}).get("Name")
+            if state in {"terminated", "shutting-down"}:
+                continue
+            instance_id = instance["InstanceId"]
+            arn = run.scan.arn("ec2", run.region, f"instance/{instance_id}")
+            options = instance.get("MetadataOptions", {})
+            evidence = {
+                "state": state,
+                "http_tokens": options.get("HttpTokens"),
+                "http_endpoint": options.get("HttpEndpoint"),
+            }
+            if options.get("HttpEndpoint") == "disabled":
+                run.passed(arn, f"Instance {instance_id} has the metadata service turned off", evidence)
+            elif options.get("HttpTokens") == "required":
+                run.passed(arn, f"Instance {instance_id} requires IMDSv2", evidence)
+            else:
+                run.failed(arn, f"Instance {instance_id} still accepts IMDSv1 requests", evidence)
