@@ -120,3 +120,69 @@ def sg_open_to_internet(run: CheckRun) -> None:
             for e in exposures
         )
         run.failed(arn, f"Security group {label} allows {described}", evidence, cis=_cis_for(exposures))
+
+
+@check(
+    id="ec2-default-sg-restricts-traffic",
+    title="Default security groups have no rules and are not in use",
+    service="ec2",
+    severity=Severity.MEDIUM,
+    scope=Scope.REGIONAL,
+    cis=("5.4",),
+    description=(
+        "Anything launched without a chosen security group lands in the VPC's default group. If that group "
+        "allows traffic, those resources are reachable without anyone deciding they should be. A default "
+        "group with rules fails (CIS 5.4); one with no rules but attached interfaces gets a low finding."
+    ),
+    console=(
+        "VPC > Security groups > the group named 'default' > remove every inbound and outbound rule. "
+        "Move any instances or interfaces using it onto purpose-built security groups first."
+    ),
+    cli=(
+        "aws ec2 describe-security-groups --group-ids <SG_ID>   # copy the rules to revoke\n"
+        "aws ec2 revoke-security-group-ingress --group-id <SG_ID> --ip-permissions '<INBOUND_RULES_JSON>'\n"
+        "aws ec2 revoke-security-group-egress --group-id <SG_ID> "
+        "--ip-permissions 'IpProtocol=-1,IpRanges=[{CidrIp=0.0.0.0/0}]'\n"
+        "aws ec2 modify-network-interface-attribute --network-interface-id <ENI_ID> --groups <OTHER_SG_ID>"
+    ),
+)
+def default_sg(run: CheckRun) -> None:
+    ec2 = run.client("ec2")
+    for group in security_groups(run):
+        if group.get("GroupName") != "default":
+            continue
+        arn = sg_arn(run, group["GroupId"])
+        with run.guard(arn):
+            interfaces = list(
+                paginate(
+                    ec2,
+                    "describe_network_interfaces",
+                    "NetworkInterfaces",
+                    Filters=[{"Name": "group-id", "Values": [group["GroupId"]]}],
+                )
+            )
+            evidence = {
+                "vpc_id": group.get("VpcId"),
+                "inbound_rules": len(group.get("IpPermissions", [])),
+                "outbound_rules": len(group.get("IpPermissionsEgress", [])),
+                "attached_network_interfaces": len(interfaces),
+            }
+            where = f"Default security group {group['GroupId']} in {group.get('VpcId')}"
+            in_use = f", attached to {len(interfaces)} network interface(s)" if interfaces else ""
+            if evidence["inbound_rules"] or evidence["outbound_rules"]:
+                run.failed(
+                    arn,
+                    f"{where} has {evidence['inbound_rules']} inbound and {evidence['outbound_rules']} "
+                    f"outbound rule(s){in_use}",
+                    evidence,
+                )
+            elif interfaces:
+                run.failed(
+                    arn,
+                    f"{where} has no rules but is in use{in_use}",
+                    evidence,
+                    severity=Severity.LOW,
+                    cis=(),
+                )
+            else:
+                run.passed(arn, f"{where} has no rules and is not in use", evidence)
