@@ -1,4 +1,4 @@
-"""S3 checks."""
+"""S3 checks: public access blocks, public bucket policies, encryption, versioning and logging."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from ..context import CheckRun, paginate
 from ..errors import error_code
-from ..models import Severity
+from ..models import Remediation, Severity
 from ..policy import as_list, load_document, public_allow_statements
 from ..registry import Scope, check
 
@@ -252,6 +252,111 @@ def bucket_policy_public(run: CheckRun) -> None:
                 f"Bucket {bucket.name} policy allows access to anyone (Principal '*')",
                 evidence,
                 region=bucket.region,
+            )
+
+    for_each_bucket(run, one)
+
+
+@check(
+    id="s3-default-encryption",
+    title="Buckets have default encryption configured",
+    service="s3",
+    severity=Severity.LOW,
+    scope=Scope.GLOBAL,
+    description=(
+        "Since January 2023 AWS applies SSE-S3 to new buckets automatically, so on current accounts this "
+        "mostly reports which algorithm each bucket uses. It fails if no default encryption is configured."
+    ),
+    console="S3 > choose the bucket > Properties > Default encryption > Edit > choose SSE-S3 or SSE-KMS.",
+    cli=(
+        "aws s3api put-bucket-encryption --bucket <BUCKET> --server-side-encryption-configuration "
+        "'{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"aws:kms\"},"
+        "\"BucketKeyEnabled\":true}]}'"
+    ),
+)
+def default_encryption(run: CheckRun) -> None:
+    def one(bucket: Bucket, s3: Any) -> None:
+        try:
+            rules = s3.get_bucket_encryption(Bucket=bucket.name)["ServerSideEncryptionConfiguration"]["Rules"]
+        except ClientError as exc:
+            if error_code(exc) != "ServerSideEncryptionConfigurationNotFoundError":
+                raise
+            run.failed(bucket.arn, f"Bucket {bucket.name} has no default encryption configured", region=bucket.region)
+            return
+        algorithms = sorted(
+            {r.get("ApplyServerSideEncryptionByDefault", {}).get("SSEAlgorithm", "unknown") for r in rules}
+        )
+        run.passed(
+            bucket.arn,
+            f"Bucket {bucket.name} encrypts new objects by default ({', '.join(algorithms)})",
+            {"algorithms": algorithms},
+            region=bucket.region,
+        )
+
+    for_each_bucket(run, one)
+
+
+VERSIONING_FIX = Remediation(
+    console="S3 > choose the bucket > Properties > Bucket Versioning > Edit > Enable.",
+    cli="aws s3api put-bucket-versioning --bucket <BUCKET> --versioning-configuration Status=Enabled",
+)
+LOGGING_FIX = Remediation(
+    console=(
+        "S3 > choose the bucket > Properties > Server access logging > Edit > Enable, and pick a separate "
+        "log bucket. Do not log a bucket into itself."
+    ),
+    cli=(
+        "aws s3api put-bucket-logging --bucket <BUCKET> --bucket-logging-status "
+        "'{\"LoggingEnabled\":{\"TargetBucket\":\"<LOG_BUCKET>\",\"TargetPrefix\":\"<BUCKET>/\"}}'"
+    ),
+)
+
+
+@check(
+    id="s3-versioning-and-logging",
+    title="Buckets have versioning and server access logging",
+    service="s3",
+    severity=Severity.LOW,
+    scope=Scope.GLOBAL,
+    description=(
+        "Versioning lets you recover objects that were overwritten or deleted, including by ransomware "
+        "or a bad script. Server access logs record who requested what. Each bucket gets one finding for "
+        "versioning and one for logging."
+    ),
+    console=VERSIONING_FIX.console + "\n" + LOGGING_FIX.console,
+    cli=VERSIONING_FIX.cli + "\n" + LOGGING_FIX.cli,
+)
+def versioning_and_logging(run: CheckRun) -> None:
+    def one(bucket: Bucket, s3: Any) -> None:
+        versioning = s3.get_bucket_versioning(Bucket=bucket.name)
+        status = versioning.get("Status", "never enabled")
+        evidence = {"versioning": status, "mfa_delete": versioning.get("MFADelete", "Disabled")}
+        if status == "Enabled":
+            run.passed(bucket.arn, f"Bucket {bucket.name} has versioning enabled", evidence, region=bucket.region)
+        else:
+            run.failed(
+                bucket.arn,
+                f"Bucket {bucket.name} does not have versioning enabled ({status})",
+                evidence,
+                region=bucket.region,
+                remediation=VERSIONING_FIX,
+            )
+
+        logging = s3.get_bucket_logging(Bucket=bucket.name).get("LoggingEnabled")
+        if logging:
+            run.passed(
+                bucket.arn,
+                f"Bucket {bucket.name} has server access logging to {logging.get('TargetBucket')}",
+                {"target_bucket": logging.get("TargetBucket"), "target_prefix": logging.get("TargetPrefix")},
+                region=bucket.region,
+            )
+        else:
+            run.failed(
+                bucket.arn,
+                f"Bucket {bucket.name} does not have server access logging enabled",
+                {"logging": "disabled"},
+                region=bucket.region,
+                remediation=LOGGING_FIX,
             )
 
     for_each_bucket(run, one)
