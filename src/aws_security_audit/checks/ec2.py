@@ -186,3 +186,77 @@ def default_sg(run: CheckRun) -> None:
                 )
             else:
                 run.passed(arn, f"{where} has no rules and is not in use", evidence)
+
+
+@check(
+    id="ec2-ebs-default-encryption",
+    title="EBS encryption by default is on in every region",
+    service="ec2",
+    severity=Severity.MEDIUM,
+    scope=Scope.REGIONAL,
+    cis=("2.2.1",),
+    description="With this on, every new EBS volume and snapshot copy in the region is encrypted automatically.",
+    console=(
+        "EC2 (in the region) > Settings > Data protection and security > EBS encryption > Manage > Enable. "
+        "Existing volumes are not changed; they need a snapshot, an encrypted copy and a restore."
+    ),
+    cli="aws ec2 enable-ebs-encryption-by-default --region <REGION>",
+)
+def ebs_default_encryption(run: CheckRun) -> None:
+    enabled = run.client("ec2").get_ebs_encryption_by_default()["EbsEncryptionByDefault"]
+    evidence = {"EbsEncryptionByDefault": enabled}
+    if enabled:
+        run.passed(run.scan.account_arn, f"EBS encryption by default is on in {run.region}", evidence)
+    else:
+        run.failed(run.scan.account_arn, f"EBS encryption by default is off in {run.region}", evidence)
+
+
+@check(
+    id="ec2-public-amis-snapshots",
+    title="No AMIs or EBS snapshots are shared publicly",
+    service="ec2",
+    severity=Severity.HIGH,
+    scope=Scope.REGIONAL,
+    description=(
+        "A public AMI or snapshot can be copied by any AWS account. Disk images often contain "
+        "credentials, keys and data that were never meant to leave the account."
+    ),
+    console=(
+        "EC2 > AMIs > choose the AMI > Actions > Edit AMI permissions > Private. "
+        "EC2 > Snapshots > choose the snapshot > Actions > Snapshot settings > Modify permissions > Private. "
+        "Then turn on 'Block public access' for AMIs and for EBS snapshots in EC2 > Settings."
+    ),
+    cli=(
+        "aws ec2 modify-image-attribute --image-id <AMI_ID> --launch-permission 'Remove=[{Group=all}]'\n"
+        "aws ec2 modify-snapshot-attribute --snapshot-id <SNAPSHOT_ID> --attribute createVolumePermission "
+        "--operation-type remove --group-names all\n"
+        "aws ec2 enable-image-block-public-access --image-block-public-access-state block-new-sharing\n"
+        "aws ec2 enable-snapshot-block-public-access --state block-all-sharing"
+    ),
+)
+def public_amis_snapshots(run: CheckRun) -> None:
+    ec2 = run.client("ec2")
+    public = 0
+    for image in paginate(ec2, "describe_images", "Images", Owners=["self"]):
+        if image.get("Public"):
+            public += 1
+            arn = f"arn:{run.scan.partition}:ec2:{run.region}::image/{image['ImageId']}"
+            run.failed(arn, f"AMI {image['ImageId']} ({image.get('Name', '')}) is public", {"public": True})
+
+    # RestorableByUserIds=all narrows the list to snapshots anyone can restore.
+    # Each one is confirmed with DescribeSnapshotAttribute before it is reported.
+    candidates = paginate(ec2, "describe_snapshots", "Snapshots", OwnerIds=["self"], RestorableByUserIds=["all"])
+    for snapshot in candidates:
+        snapshot_id = snapshot["SnapshotId"]
+        arn = f"arn:{run.scan.partition}:ec2:{run.region}::snapshot/{snapshot_id}"
+        with run.guard(arn):
+            permissions = ec2.describe_snapshot_attribute(SnapshotId=snapshot_id, Attribute="createVolumePermission")
+            if any(p.get("Group") == "all" for p in permissions.get("CreateVolumePermissions", [])):
+                public += 1
+                run.failed(
+                    arn,
+                    f"EBS snapshot {snapshot_id} is public",
+                    {"volume_id": snapshot.get("VolumeId"), "encrypted": snapshot.get("Encrypted")},
+                )
+    if not public:
+        run.passed(run.scan.account_arn, f"No public AMIs or EBS snapshots owned by the account in {run.region}")
