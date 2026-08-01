@@ -27,6 +27,8 @@ FAKE_ENV = {
     "AWS_DEFAULT_REGION": "us-east-1",
     "AWS_CONFIG_FILE": os.devnull,
     "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+    # moto otherwise seeds the account with hundreds of public AMI snapshots.
+    "MOTO_EC2_LOAD_DEFAULT_AMIS": "false",
 }
 
 
