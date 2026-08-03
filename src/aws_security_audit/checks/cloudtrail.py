@@ -83,7 +83,11 @@ def multi_region_trail(run: CheckRun) -> None:
 
     if good:
         names = [t["Name"] for t in good]
-        run.passed(good[0]["TrailARN"], f"Multi-region trail(s) logging management events: {', '.join(names)}", {"trails": names})
+        run.passed(
+            good[0]["TrailARN"],
+            f"Multi-region trail(s) logging management events: {', '.join(names)}",
+            {"trails": names},
+        )
     elif unverified and not problems:
         # Every multi-region trail hit an API error; those are already reported as could not check.
         return
@@ -104,7 +108,9 @@ def multi_region_trail(run: CheckRun) -> None:
     severity=Severity.MEDIUM,
     scope=Scope.REGIONAL,
     cis=("3.2",),
-    description="Validation writes signed digest files, so you can prove later that log files were not altered or deleted.",
+    description=(
+        "Validation writes signed digest files, so you can prove later that log files were not altered or deleted."
+    ),
     console="CloudTrail > Trails > choose the trail > General details > Edit > Log file validation: Enabled.",
     cli="aws cloudtrail update-trail --name <TRAIL> --enable-log-file-validation",
 )
@@ -140,4 +146,6 @@ def kms_encryption(run: CheckRun) -> None:
         if key:
             run.passed(trail["TrailARN"], f"Trail {trail['Name']} logs are encrypted with KMS", {"KmsKeyId": key})
         else:
-            run.failed(trail["TrailARN"], f"Trail {trail['Name']} logs are not encrypted with a KMS key", {"KmsKeyId": None})
+            run.failed(
+                trail["TrailARN"], f"Trail {trail['Name']} logs are not encrypted with a KMS key", {"KmsKeyId": None}
+            )

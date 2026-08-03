@@ -8,7 +8,7 @@ never pick up a real profile or make a real API call.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import boto3
 import pytest
@@ -30,7 +30,6 @@ FAKE_ENV = {
     # moto otherwise seeds the account with hundreds of public AMI snapshots.
     "MOTO_EC2_LOAD_DEFAULT_AMIS": "false",
 }
-
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +57,7 @@ def make_ctx(aws):
     """Build a ScanContext on a fresh boto3 session, optionally with the clock moved forward."""
 
     def _make(days_later: int = 0) -> ScanContext:
-        now = datetime.now(timezone.utc) + timedelta(days=days_later)
+        now = datetime.now(UTC) + timedelta(days=days_later)
         return ScanContext.from_session(boto3.Session(region_name=REGION), now=now)
 
     return _make

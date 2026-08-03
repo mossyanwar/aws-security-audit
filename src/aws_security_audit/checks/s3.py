@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -270,8 +271,8 @@ def bucket_policy_public(run: CheckRun) -> None:
     console="S3 > choose the bucket > Properties > Default encryption > Edit > choose SSE-S3 or SSE-KMS.",
     cli=(
         "aws s3api put-bucket-encryption --bucket <BUCKET> --server-side-encryption-configuration "
-        "'{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"aws:kms\"},"
-        "\"BucketKeyEnabled\":true}]}'"
+        '\'{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"},'
+        '"BucketKeyEnabled":true}]}\''
     ),
 )
 def default_encryption(run: CheckRun) -> None:
@@ -307,7 +308,7 @@ LOGGING_FIX = Remediation(
     ),
     cli=(
         "aws s3api put-bucket-logging --bucket <BUCKET> --bucket-logging-status "
-        "'{\"LoggingEnabled\":{\"TargetBucket\":\"<LOG_BUCKET>\",\"TargetPrefix\":\"<BUCKET>/\"}}'"
+        '\'{"LoggingEnabled":{"TargetBucket":"<LOG_BUCKET>","TargetPrefix":"<BUCKET>/"}}\''
     ),
 )
 

@@ -8,9 +8,10 @@ writing one function in one of the modules under ``checks/`` and nothing else.
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from enum import Enum
-from typing import TYPE_CHECKING, Callable, Iterable
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from .models import Remediation, Severity
 
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
     from .context import CheckRun
 
 
-class Scope(str, Enum):
+class Scope(StrEnum):
     # Runs once per scan, for account-wide settings (IAM, S3 account settings).
     GLOBAL = "global"
     # Runs once in every scanned region.

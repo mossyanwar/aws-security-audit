@@ -116,7 +116,9 @@ def sg_open_to_internet(run: CheckRun) -> None:
             run.passed(arn, f"Security group {label} has no admin or database ports open to the internet")
             continue
         described = ", ".join(
-            f"{e['service']} ({e['port']}) from {e['source']}" if e["port"] != "all" else f"all ports from {e['source']}"
+            f"{e['service']} ({e['port']}) from {e['source']}"
+            if e["port"] != "all"
+            else f"all ports from {e['source']}"
             for e in exposures
         )
         run.failed(arn, f"Security group {label} allows {described}", evidence, cis=_cis_for(exposures))
@@ -277,7 +279,10 @@ def public_amis_snapshots(run: CheckRun) -> None:
         "EC2 > Instances > choose the instance > Actions > Instance settings > Modify instance metadata "
         "options > IMDSv2: Required. Check that the software on the instance uses a recent AWS SDK first."
     ),
-    cli="aws ec2 modify-instance-metadata-options --instance-id <INSTANCE_ID> --http-tokens required --http-endpoint enabled",
+    cli=(
+        "aws ec2 modify-instance-metadata-options --instance-id <INSTANCE_ID> "
+        "--http-tokens required --http-endpoint enabled"
+    ),
 )
 def imdsv2_required(run: CheckRun) -> None:
     for reservation in paginate(run.client("ec2"), "describe_instances", "Reservations"):

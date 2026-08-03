@@ -165,7 +165,9 @@ def test_bucket_with_kms_encryption_passes(scan, s3):
     make_bucket("encrypted")
     s3.put_bucket_encryption(
         Bucket="encrypted",
-        ServerSideEncryptionConfiguration={"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms"}}]},
+        ServerSideEncryptionConfiguration={
+            "Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms"}}]
+        },
     )
     [finding] = passed(scan("s3-default-encryption"))
     assert finding.evidence == {"algorithms": ["aws:kms"]}
@@ -204,7 +206,8 @@ def test_bucket_with_versioning_and_logging_passes(scan, s3):
     make_bucket("app-data")
     s3.put_bucket_versioning(Bucket="app-data", VersioningConfiguration={"Status": "Enabled"})
     s3.put_bucket_logging(
-        Bucket="app-data", BucketLoggingStatus={"LoggingEnabled": {"TargetBucket": "app-log-target", "TargetPrefix": "app-data/"}}
+        Bucket="app-data",
+        BucketLoggingStatus={"LoggingEnabled": {"TargetBucket": "app-log-target", "TargetPrefix": "app-data/"}},
     )
     result = scan("s3-versioning-and-logging")
     app = [f for f in result.findings if f.resource_arn == "arn:aws:s3:::app-data"]

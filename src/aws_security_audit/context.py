@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Callable, Iterator, TypeVar
+from datetime import UTC, datetime
+from typing import Any, TypeVar
 
 import boto3
 from botocore.config import Config
@@ -61,7 +62,7 @@ class ScanContext:
         self.account_id = account_id
         self.partition = partition
         self.home_region = home_region
-        self.now = now or datetime.now(timezone.utc)
+        self.now = now or datetime.now(UTC)
         self.caller_arn: str | None = None
         self.operations: set[tuple[str, str]] = set()
         self._clients: dict[tuple[str, str], Any] = {}
@@ -78,7 +79,7 @@ class ScanContext:
         session: boto3.Session,
         home_region: str | None = None,
         now: datetime | None = None,
-    ) -> "ScanContext":
+    ) -> ScanContext:
         """Look up the account behind the session's credentials with sts:GetCallerIdentity."""
         region = home_region or session.region_name or DEFAULT_HOME_REGION
         sts = session.client("sts", region_name=region, config=BOTO_CONFIG)

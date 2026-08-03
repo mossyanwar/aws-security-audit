@@ -17,7 +17,10 @@ from ..registry import Scope, check
         "GuardDuty watches CloudTrail, VPC flow logs and DNS logs for signs of compromise, such as "
         "credentials used from unusual places or instances talking to known bad hosts."
     ),
-    console="GuardDuty (in the region) > Get started > Enable GuardDuty. In an organisation, use a delegated admin account.",
+    console=(
+        "GuardDuty (in the region) > Get started > Enable GuardDuty. "
+        "In an organisation, enable it from a delegated administrator account instead."
+    ),
     cli="aws guardduty create-detector --enable --region <REGION>",
 )
 def guardduty_enabled(run: CheckRun) -> None:
@@ -88,6 +91,8 @@ def config_recorder(run: CheckRun) -> None:
         if not all_supported:
             problems.append("does not record all supported resource types")
         if problems:
-            run.failed(run.scan.account_arn, f"AWS Config recorder {name} in {run.region} {' and '.join(problems)}", evidence)
+            run.failed(
+                run.scan.account_arn, f"AWS Config recorder {name} in {run.region} {' and '.join(problems)}", evidence
+            )
         else:
             run.passed(run.scan.account_arn, f"AWS Config recorder {name} is recording all resource types", evidence)

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
@@ -20,7 +20,7 @@ class Severity(str, Enum):
         return _SEVERITY_RANK[self]
 
     @classmethod
-    def parse(cls, value: str) -> "Severity":
+    def parse(cls, value: str) -> Severity:
         try:
             return cls(value.lower())
         except ValueError:
@@ -37,7 +37,7 @@ _SEVERITY_RANK = {
 }
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     PASS = "pass"
     FAIL = "fail"
     # The check ran but could not reach a verdict for this resource or region,

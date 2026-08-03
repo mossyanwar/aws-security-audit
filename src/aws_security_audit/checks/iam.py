@@ -27,9 +27,7 @@ PASSWORD_REUSE_COUNT = 24
 
 
 def account_summary(run: CheckRun) -> dict[str, int]:
-    return run.scan.cached(
-        "iam:account_summary", lambda: run.client("iam").get_account_summary()["SummaryMap"]
-    )
+    return run.scan.cached("iam:account_summary", lambda: run.client("iam").get_account_summary()["SummaryMap"])
 
 
 def credential_report(run: CheckRun) -> list[dict[str, str]]:
@@ -360,6 +358,8 @@ def user_admin_policy(run: CheckRun) -> None:
                 if grants_full_admin(load_document(document)):
                     reasons.append(f"{policy_name} (inline, allows *:*)")
             if reasons:
-                run.failed(arn, f"User {name} has full admin attached directly: {', '.join(reasons)}", {"policies": reasons})
+                run.failed(
+                    arn, f"User {name} has full admin attached directly: {', '.join(reasons)}", {"policies": reasons}
+                )
             else:
                 run.passed(arn, f"User {name} has no full admin policy attached directly")

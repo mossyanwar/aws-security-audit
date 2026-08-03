@@ -91,7 +91,9 @@ def test_console_user_with_mfa_passes(iam, scan):
     iam.create_user(UserName="bob")
     iam.create_login_profile(UserName="bob", Password="Correct-Horse-1")
     serial = iam.create_virtual_mfa_device(VirtualMFADeviceName="bob")["VirtualMFADevice"]["SerialNumber"]
-    iam.enable_mfa_device(UserName="bob", SerialNumber=serial, AuthenticationCode1="123456", AuthenticationCode2="654321")
+    iam.enable_mfa_device(
+        UserName="bob", SerialNumber=serial, AuthenticationCode1="123456", AuthenticationCode2="654321"
+    )
     result = scan("iam-user-console-mfa")
     assert not failed(result)
     assert [f.resource_arn for f in passed(result)] == [f"arn:aws:iam::{ACCOUNT_ID}:user/bob"]

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Callable
+from datetime import UTC, datetime
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -102,7 +102,7 @@ def run_scan(
     max_workers: int = 8,
     on_progress: Callable[[Execution], None] | None = None,
 ) -> ScanResult:
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     findings: list[Finding] = []
     executions: list[Execution] = []
     tasks = plan(checks, regions)
@@ -124,6 +124,6 @@ def run_scan(
         findings=findings,
         executions=executions,
         started_at=started_at,
-        finished_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(UTC),
         caller_arn=scan.caller_arn,
     )

@@ -20,6 +20,7 @@ dependencies = [
 dev = [
     "moto[cloudtrail,config,ec2,guardduty,iam,kms,rds,s3,s3control,sts]>=5.0",
     "pytest>=8",
+    "ruff>=0.6",
 ]
 
 [project.scripts]
@@ -35,3 +36,10 @@ aws_security_audit = ["templates/*.j2"]
 testpaths = ["tests"]
 addopts = "-q"
 markers = ["managed_policies: load AWS managed IAM policies into moto"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

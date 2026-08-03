@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 import boto3
 import typer
@@ -35,7 +35,7 @@ def _version(value: bool) -> None:
 @app.callback()
 def main(
     version: Annotated[
-        Optional[bool], typer.Option("--version", callback=_version, is_eager=True, help="Show the version.")
+        bool | None, typer.Option("--version", callback=_version, is_eager=True, help="Show the version.")
     ] = None,
 ) -> None:
     pass
@@ -45,7 +45,8 @@ def main(
 def list_checks() -> None:
     """List every check with its severity and CIS mapping."""
     table = Table(header_style="bold")
-    for column in ("ID", "Service", "Severity", "Scope", "CIS v3.0.0", "Title"):
+    table.add_column("ID", no_wrap=True)
+    for column in ("Service", "Severity", "Scope", "CIS v3.0.0", "Title"):
         table.add_column(column, overflow="fold")
     checks = all_checks()
     for spec in checks:
@@ -58,17 +59,17 @@ def list_checks() -> None:
 
 @app.command()
 def scan(
-    profile: Annotated[Optional[str], typer.Option(help="AWS CLI profile to use.")] = None,
+    profile: Annotated[str | None, typer.Option(help="AWS CLI profile to use.")] = None,
     region: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--region", "-r", help="Region to scan. Repeat for several. Default: all enabled regions."),
     ] = None,
     home_region: Annotated[
-        Optional[str], typer.Option(help="Region used for global services. Default: the profile's region or us-east-1.")
+        str | None, typer.Option(help="Region used for global services. Default: the profile's region or us-east-1.")
     ] = None,
-    check: Annotated[Optional[list[str]], typer.Option("--check", "-c", help="Only run this check id.")] = None,
-    skip_check: Annotated[Optional[list[str]], typer.Option("--skip-check", help="Do not run this check id.")] = None,
-    service: Annotated[Optional[list[str]], typer.Option("--service", "-s", help="Only run checks for a service.")] = None,
+    check: Annotated[list[str] | None, typer.Option("--check", "-c", help="Only run this check id.")] = None,
+    skip_check: Annotated[list[str] | None, typer.Option("--skip-check", help="Do not run this check id.")] = None,
+    service: Annotated[list[str] | None, typer.Option("--service", "-s", help="Only run checks for a service.")] = None,
     workers: Annotated[int, typer.Option(min=1, max=32, help="Threads used to run checks.")] = 8,
     show_passed: Annotated[bool, typer.Option(help="Include passed items in the console table.")] = False,
 ) -> None:
@@ -77,7 +78,7 @@ def scan(
         checks = select_checks(check or (), skip_check or (), service or ())
     except KeyError as exc:
         err.print(f"error: {exc.args[0]}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     if not checks:
         err.print("error: no checks selected")
         raise typer.Exit(2)
@@ -87,13 +88,13 @@ def scan(
         scan_ctx = ScanContext.from_session(session, home_region=home_region)
     except ProfileNotFound as exc:
         err.print(f"error: {exc}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     except NoCredentialsError:
         err.print("error: no AWS credentials found. Use --profile or configure the AWS CLI first.")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     except (ClientError, BotoCoreError) as exc:
         err.print(f"error: could not identify the account with sts:GetCallerIdentity: {exc}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
 
     regions, warnings = resolve_regions(scan_ctx, region)
     err.print(f"Scanning account {scan_ctx.account_id} with {len(checks)} checks in {len(regions)} region(s)...")
