@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+from pathlib import Path
 from typing import Annotated
 
 import boto3
@@ -12,10 +14,13 @@ from rich.table import Table
 
 from . import __version__
 from .context import ScanContext
+from .exitcodes import EXIT_USAGE, exit_code
+from .models import Severity
 from .output import console as console_output
+from .output import csv_report, html_report, json_report, sarif
 from .regions import resolve_regions
 from .registry import all_checks, select_checks
-from .runner import run_scan
+from .runner import ScanResult, run_scan
 
 app = typer.Typer(
     add_completion=False,
@@ -24,6 +29,37 @@ app = typer.Typer(
 )
 out = Console()
 err = Console(stderr=True)
+
+
+class FailOn(StrEnum):
+    critical = "critical"
+    high = "high"
+    medium = "medium"
+    low = "low"
+    info = "info"
+    none = "none"
+
+
+def write_reports(
+    result: ScanResult,
+    json_path: Path | None = None,
+    html_path: Path | None = None,
+    sarif_path: Path | None = None,
+    csv_path: Path | None = None,
+) -> list[Path]:
+    written = []
+    for path, writer in (
+        (json_path, json_report.write),
+        (html_path, html_report.write),
+        (sarif_path, sarif.write),
+        (csv_path, csv_report.write),
+    ):
+        if path is None:
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        writer(result, path)
+        written.append(path)
+    return written
 
 
 def _version(value: bool) -> None:
@@ -72,35 +108,49 @@ def scan(
     service: Annotated[list[str] | None, typer.Option("--service", "-s", help="Only run checks for a service.")] = None,
     workers: Annotated[int, typer.Option(min=1, max=32, help="Threads used to run checks.")] = 8,
     show_passed: Annotated[bool, typer.Option(help="Include passed items in the console table.")] = False,
+    json_path: Annotated[Path | None, typer.Option("--json", help="Write a JSON report to this path.")] = None,
+    html_path: Annotated[Path | None, typer.Option("--html", help="Write a self-contained HTML report.")] = None,
+    sarif_path: Annotated[Path | None, typer.Option("--sarif", help="Write a SARIF 2.1.0 report.")] = None,
+    csv_path: Annotated[Path | None, typer.Option("--csv", help="Write a CSV report.")] = None,
+    fail_on: Annotated[
+        FailOn, typer.Option(help="Exit 1 if any open failure is at or above this severity.")
+    ] = FailOn.none,
+    fail_on_incomplete: Annotated[
+        bool, typer.Option(help="Exit 3 if anything could not be checked (for example AccessDenied).")
+    ] = False,
 ) -> None:
     """Scan an AWS account. Makes read-only API calls only."""
     try:
         checks = select_checks(check or (), skip_check or (), service or ())
     except KeyError as exc:
         err.print(f"error: {exc.args[0]}")
-        raise typer.Exit(2) from None
+        raise typer.Exit(EXIT_USAGE) from None
     if not checks:
         err.print("error: no checks selected")
-        raise typer.Exit(2)
+        raise typer.Exit(EXIT_USAGE)
 
     try:
         session = boto3.Session(profile_name=profile)
         scan_ctx = ScanContext.from_session(session, home_region=home_region)
     except ProfileNotFound as exc:
         err.print(f"error: {exc}")
-        raise typer.Exit(2) from None
+        raise typer.Exit(EXIT_USAGE) from None
     except NoCredentialsError:
         err.print("error: no AWS credentials found. Use --profile or configure the AWS CLI first.")
-        raise typer.Exit(2) from None
+        raise typer.Exit(EXIT_USAGE) from None
     except (ClientError, BotoCoreError) as exc:
         err.print(f"error: could not identify the account with sts:GetCallerIdentity: {exc}")
-        raise typer.Exit(2) from None
+        raise typer.Exit(EXIT_USAGE) from None
 
     regions, warnings = resolve_regions(scan_ctx, region)
     err.print(f"Scanning account {scan_ctx.account_id} with {len(checks)} checks in {len(regions)} region(s)...")
     result = run_scan(scan_ctx, checks, regions, max_workers=workers)
     result.warnings.extend(warnings)
     console_output.render(result, out, show_passed=show_passed)
+    for path in write_reports(result, json_path, html_path, sarif_path, csv_path):
+        err.print(f"Wrote {path}")
+    threshold = None if fail_on is FailOn.none else Severity(fail_on.value)
+    raise typer.Exit(exit_code(result, threshold, fail_on_incomplete))
 
 
 if __name__ == "__main__":
