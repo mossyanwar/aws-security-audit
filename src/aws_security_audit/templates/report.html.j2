@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS security audit - {{ r.account_id }}</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #5f5f5a; --line: #e2e2dc;
+  --code-bg: #f0f0eb; --note-bg: #fff4d6; --note-line: #e0b400;
+  --critical: #a4161a; --high: #d1495b; --medium: #b86e00; --low: #2f6690; --info: #6c757d;
+  --pass: #2d6a4f; --error: #7b2cbf;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #1f1f1d; --text: #ecece8; --muted: #a5a59e; --line: #34342f;
+    --code-bg: #2a2a27; --note-bg: #3a3112; --note-line: #c9a100;
+    --critical: #ff6b6b; --high: #ff8787; --medium: #f0a830; --low: #74a9d8; --info: #adb5bd;
+    --pass: #74c69d; --error: #c39bd3;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 19px; margin: 32px 0 12px; }
+h4 { font-size: 13px; margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.note { background: var(--note-bg); border-left: 4px solid var(--note-line); padding: 10px 14px; margin: 14px 0; font-weight: 600; }
+.meta { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 12px 0 0; color: var(--muted); }
+.meta dt { font-weight: 600; } .meta dd { margin: 0; overflow-wrap: anywhere; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 20px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.card .n { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.card .l { color: var(--muted); font-size: 13px; }
+.warnings { background: var(--note-bg); border: 1px solid var(--note-line); border-radius: 8px; padding: 8px 14px; margin-top: 16px; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+.table-wrap { overflow-x: auto; }
+.nowrap { white-space: nowrap; }
+.badge { display: inline-block; min-width: 64px; text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .03em; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; }
+.critical { color: var(--critical); } .high { color: var(--high); } .medium { color: var(--medium); }
+.low { color: var(--low); } .info { color: var(--info); }
+.o-fail { color: var(--high); font-weight: 600; } .o-pass { color: var(--pass); }
+.o-could-not-check { color: var(--error); font-weight: 600; } .o-suppressed, .o-no-resources { color: var(--muted); }
+.finding { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
+.finding > summary { cursor: pointer; padding: 9px 12px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; list-style: none; }
+.finding > summary::-webkit-details-marker { display: none; }
+.finding > summary::before { content: "+"; color: var(--muted); width: 10px; }
+.finding[open] > summary::before { content: "-"; }
+.finding .msg { flex: 1 1 320px; }
+.finding .region { color: var(--muted); font-size: 13px; }
+.finding .body { padding: 0 14px 14px 32px; }
+.finding .body p { margin: 6px 0; }
+.console-fix { white-space: pre-line; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.toolbar input { flex: 1 1 240px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; }
+.toolbar button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.empty { color: var(--muted); }
+details.passed > summary { cursor: pointer; }
+details.passed > summary h2 { display: inline; }
+footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>AWS security audit</h1>
+  {% if r.note %}<p class="note">{{ r.note }}</p>{% endif %}
+  <dl class="meta">
+    <dt>Account</dt><dd>{{ r.account_id }} ({{ r.partition }})</dd>
+    {% if r.caller_arn %}<dt>Scanned as</dt><dd>{{ r.caller_arn }}</dd>{% endif %}
+    <dt>Regions</dt><dd>{{ r.regions | join(", ") }}</dd>
+    <dt>Started</dt><dd>{{ r.started_at.strftime("%Y-%m-%d %H:%M:%S UTC") }}</dd>
+    <dt>Duration</dt><dd>{{ duration }} s</dd>
+    <dt>Checks</dt><dd>{{ r.checks | length }}</dd>
+    <dt>Tool</dt><dd>aws-security-audit {{ r.tool_version }}</dd>
+  </dl>
+</header>
+
+<section class="cards" aria-label="Summary">
+  {% for sev in ["critical", "high", "medium", "low"] %}
+  <div class="card"><div class="n {{ sev }}">{{ by_sev[sev] }}</div><div class="l">open {{ sev }}</div></div>
+  {% endfor %}
+  <div class="card"><div class="n o-could-not-check">{{ counts.error }}</div><div class="l">could not check</div></div>
+  <div class="card"><div class="n o-pass">{{ counts.pass }}</div><div class="l">passed</div></div>
+  <div class="card"><div class="n">{{ counts.suppressed }}</div><div class="l">suppressed</div></div>
+</section>
+
+{% if r.warnings %}
+<section class="warnings">
+  <strong>Warnings</strong>
+  <ul>{% for w in r.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<h2>Checks</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Check</th><th>Title</th><th>Severity</th><th>CIS v3.0.0</th><th>Outcome</th><th>Fail / error / pass</th></tr></thead>
+  <tbody>
+  {% for s in summaries %}
+    <tr>
+      <td><code>{{ s.spec.id }}</code></td>
+      <td>{{ s.spec.title }}</td>
+      <td><span class="badge {{ s.spec.severity.value }}">{{ s.spec.severity.value }}</span></td>
+      <td>{{ s.spec.cis | join(", ") or "-" }}</td>
+      <td class="nowrap o-{{ s.outcome | replace(' ', '-') }}">{{ s.outcome }}</td>
+      <td class="nowrap">{{ s.failed }} / {{ s.errors }} / {{ s.passed }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% macro finding_card(f) %}
+<details class="finding" data-text="{{ (f.check_id ~ ' ' ~ f.severity.value ~ ' ' ~ f.region ~ ' ' ~ f.resource_arn ~ ' ' ~ f.message) | lower }}">
+  <summary>
+    <span class="badge {{ f.severity.value }}">{{ f.severity.value }}</span>
+    <code>{{ f.check_id }}</code>
+    <span class="msg">{{ f.message }}</span>
+    <span class="region">{{ f.region }}</span>
+  </summary>
+  <div class="body">
+    <p><strong>Resource</strong> <code>{{ f.resource_arn }}</code></p>
+    {% if f.cis %}<p><strong>CIS AWS Foundations Benchmark v3.0.0</strong> {{ f.cis | join(", ") }}</p>{% endif %}
+    {% if f.suppressed %}<p><strong>Suppressed:</strong> {{ f.suppression_reason }}</p>{% endif %}
+    {% if f.evidence %}<h4>Evidence</h4><pre>{{ f.evidence | tojson(indent=2) }}</pre>{% endif %}
+    {% if f.remediation %}
+    <h4>Fix in the console</h4><p class="console-fix">{{ f.remediation.console }}</p>
+    <h4>Fix with the AWS CLI</h4><pre>{{ f.remediation.cli }}</pre>
+    {% endif %}
+  </div>
+</details>
+{% endmacro %}
+
+<h2>Failed ({{ failures | length }})</h2>
+{% if failures %}
+<div class="toolbar">
+  <input type="search" id="filter" placeholder="Filter by check, resource, region or text" aria-label="Filter findings">
+  <button type="button" id="expand">Expand all</button>
+</div>
+<div id="failures">{% for f in failures %}{{ finding_card(f) }}{% endfor %}</div>
+{% else %}<p class="empty">No open failures.</p>{% endif %}
+
+<h2>Could not check ({{ errors | length }})</h2>
+{% if errors %}
+<p>These items were not evaluated, usually because of missing permissions or a region that is not enabled. They are not passes.</p>
+{% for f in errors %}{{ finding_card(f) }}{% endfor %}
+{% else %}<p class="empty">Every check was able to run.</p>{% endif %}
+
+<h2>Suppressed ({{ suppressed | length }})</h2>
+{% if suppressed %}
+{% for f in suppressed %}{{ finding_card(f) }}{% endfor %}
+{% else %}<p class="empty">Nothing suppressed.</p>{% endif %}
+
+<details class="passed">
+  <summary><h2>Passed ({{ passed | length }})</h2></summary>
+  {% if passed %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Check</th><th>Region</th><th>Resource</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for f in passed %}
+      <tr><td><code>{{ f.check_id }}</code></td><td>{{ f.region }}</td><td><code>{{ f.resource_arn }}</code></td><td>{{ f.message }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="empty">No passed items.</p>{% endif %}
+</details>
+
+<footer>
+  Generated by aws-security-audit {{ r.tool_version }} on {{ r.finished_at.strftime("%Y-%m-%d %H:%M UTC") }}.
+  The scanner only makes read-only API calls. A pass means the setting was read and met the check; it is not a guarantee that the account is secure.
+</footer>
+</main>
+<script>
+(function () {
+  var input = document.getElementById("filter");
+  var cards = document.querySelectorAll("#failures .finding");
+  if (input) {
+    input.addEventListener("input", function () {
+      var q = input.value.trim().toLowerCase();
+      cards.forEach(function (card) {
+        card.style.display = !q || card.getAttribute("data-text").indexOf(q) !== -1 ? "" : "none";
+      });
+    });
+  }
+  var button = document.getElementById("expand");
+  if (button) {
+    button.addEventListener("click", function () {
+      var open = button.textContent === "Expand all";
+      cards.forEach(function (card) { card.open = open; });
+      button.textContent = open ? "Collapse all" : "Expand all";
+    });
+  }
+})();
+</script>
+</body>
+</html>
