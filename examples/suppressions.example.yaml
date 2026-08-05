@@ -1,0 +1,25 @@
+# Accepted findings. Pass with: aws-security-audit scan --suppressions this-file.yaml
+#
+# Every entry needs all four keys. Suppressed findings still appear in every
+# report, marked as suppressed with the reason, but stop counting towards
+# --fail-on. Expired entries are ignored and reported as warnings, so the
+# finding comes back until someone looks at it again.
+#
+# resource is an exact ARN or a shell-style pattern (* and ?). A pattern that
+# matches everything is rejected; use --skip-check to turn a check off.
+
+suppressions:
+  - check: s3-versioning-and-logging
+    resource: arn:aws:s3:::example-access-logs
+    reason: Target bucket for S3 access logs. Logging it into itself would create a loop.
+    expires: 2027-03-31
+
+  - check: ec2-sg-open-to-internet
+    resource: arn:aws:ec2:eu-west-2:111122223333:security-group/sg-0123456789abcdef0
+    reason: Public SFTP endpoint for a partner, tracked in ticket SEC-142. Moving to AWS Transfer Family.
+    expires: 2026-12-31
+
+  - check: s3-bucket-policy-public
+    resource: arn:aws:s3:::example-public-site-*
+    reason: Static website buckets behind CloudFront; review once origin access control is rolled out.
+    expires: 2027-01-31

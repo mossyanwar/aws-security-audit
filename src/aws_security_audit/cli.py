@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -21,6 +22,9 @@ from .output import csv_report, html_report, json_report, sarif
 from .regions import resolve_regions
 from .registry import all_checks, select_checks
 from .runner import ScanResult, run_scan
+from .suppressions import SuppressionError
+from .suppressions import apply as apply_suppressions
+from .suppressions import load as load_suppressions
 
 app = typer.Typer(
     add_completion=False,
@@ -118,6 +122,9 @@ def scan(
     fail_on_incomplete: Annotated[
         bool, typer.Option(help="Exit 3 if anything could not be checked (for example AccessDenied).")
     ] = False,
+    suppressions: Annotated[
+        Path | None, typer.Option(help="YAML file of accepted findings, each with a reason and expiry date.")
+    ] = None,
 ) -> None:
     """Scan an AWS account. Makes read-only API calls only."""
     try:
@@ -128,6 +135,17 @@ def scan(
     if not checks:
         err.print("error: no checks selected")
         raise typer.Exit(EXIT_USAGE)
+
+    # Read the suppressions before touching AWS, so a typo fails fast.
+    accepted, suppression_warnings = [], []
+    if suppressions is not None:
+        try:
+            accepted, suppression_warnings = load_suppressions(
+                suppressions, {spec.id for spec in all_checks()}, date.today()
+            )
+        except SuppressionError as exc:
+            err.print(f"error: {exc}")
+            raise typer.Exit(EXIT_USAGE) from None
 
     try:
         session = boto3.Session(profile_name=profile)
@@ -146,6 +164,8 @@ def scan(
     err.print(f"Scanning account {scan_ctx.account_id} with {len(checks)} checks in {len(regions)} region(s)...")
     result = run_scan(scan_ctx, checks, regions, max_workers=workers)
     result.warnings.extend(warnings)
+    result.warnings.extend(suppression_warnings)
+    result.warnings.extend(apply_suppressions(result.findings, accepted, {spec.id for spec in checks}))
     console_output.render(result, out, show_passed=show_passed)
     for path in write_reports(result, json_path, html_path, sarif_path, csv_path):
         err.print(f"Wrote {path}")
