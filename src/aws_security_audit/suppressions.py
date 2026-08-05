@@ -58,7 +58,10 @@ def _parse_date(value: object, where: str) -> date:
 def parse(text: str, known_checks: set[str], today: date) -> tuple[list[Suppression], list[str]]:
     """Return (active suppressions, warnings). Raises SuppressionError on bad input."""
     # safe_load only builds plain types; yaml.load could construct arbitrary objects.
-    data = yaml.safe_load(text)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise SuppressionError(f"not valid YAML: {exc}") from None
     if data is None:
         return [], []
     if not isinstance(data, dict) or not isinstance(data.get("suppressions"), list):
@@ -104,8 +107,8 @@ def load(path: Path, known_checks: set[str], today: date) -> tuple[list[Suppress
         raise SuppressionError(f"cannot read {path}: {exc.strerror}") from None
     try:
         return parse(text, known_checks, today)
-    except yaml.YAMLError as exc:
-        raise SuppressionError(f"{path} is not valid YAML: {exc}") from None
+    except SuppressionError as exc:
+        raise SuppressionError(f"{path}: {exc}") from None
 
 
 def apply(findings: list[Finding], suppressions: list[Suppression], checks_run: set[str]) -> list[str]:
