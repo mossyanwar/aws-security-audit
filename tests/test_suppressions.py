@@ -13,7 +13,7 @@ from aws_security_audit.models import Finding, Severity, Status
 from aws_security_audit.registry import all_checks
 from aws_security_audit.suppressions import Suppression, SuppressionError, apply, load, parse
 
-TODAY = date(2026, 8, 7)
+TODAY = date(2026, 8, 8)
 KNOWN = {spec.id for spec in all_checks()}
 ROOT = "arn:aws:iam::123456789012:root"
 
@@ -85,13 +85,13 @@ def test_missing_expiry_is_rejected():
 
 
 def test_expired_entry_is_ignored_with_a_warning():
-    active, warnings = parse(entry(expires="2026-08-06"), KNOWN, TODAY)
+    active, warnings = parse(entry(expires="2026-08-07"), KNOWN, TODAY)
     assert active == []
-    assert "expired on 2026-08-06" in warnings[0]
+    assert "expired on 2026-08-07" in warnings[0]
 
 
 def test_entry_expiring_today_still_applies():
-    active, _ = parse(entry(expires="2026-08-07"), KNOWN, TODAY)
+    active, _ = parse(entry(expires="2026-08-08"), KNOWN, TODAY)
     assert len(active) == 1
 
 

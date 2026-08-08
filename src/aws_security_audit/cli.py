@@ -173,5 +173,26 @@ def scan(
     raise typer.Exit(exit_code(result, threshold, fail_on_incomplete))
 
 
+@app.command()
+def demo(
+    output_dir: Annotated[Path, typer.Option(help="Where to write the sample reports.")] = Path("sample-report"),
+    workers: Annotated[int, typer.Option(min=1, max=32, help="Threads used to run checks.")] = 4,
+) -> None:
+    """Build a misconfigured mock account in moto, scan it and write sample reports.
+
+    Runs entirely inside moto with fake credentials; no real AWS calls are made.
+    """
+    from .demo import DemoUnavailable, scan_demo_account, write_demo_reports
+
+    try:
+        result, _, planted = scan_demo_account(workers)
+    except DemoUnavailable as exc:
+        err.print(f"error: {exc}")
+        raise typer.Exit(EXIT_USAGE) from None
+    console_output.render(result, out)
+    for path in write_demo_reports(result, planted, output_dir):
+        err.print(f"Wrote {path}")
+
+
 if __name__ == "__main__":
     app()
