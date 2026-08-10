@@ -1,0 +1,19 @@
+What 'aws-security-audit demo' creates in the moto mock account before scanning it:
+
+- Password policy with an 8 character minimum and no reuse prevention
+- User deploy-bot with an access key and a customer managed '*:*' policy
+- User alice with a console password and no MFA
+- User bob with a console password and MFA (should pass)
+- Bucket demo-public-assets with a Principal '*' bucket policy and no public access block
+- Bucket demo-customer-exports (London) with no public access block, versioning or logging
+- Bucket demo-access-logs: locked down, but no logging of its own (suppressed in the demo)
+- Bucket demo-app-data configured properly (should pass)
+- us-east-1: SSH open to 0.0.0.0/0 and RDP open to ::/0, an IMDSv1 instance, a public AMI
+- us-east-1: EBS encryption by default left off; HTTPS-only security group (should pass)
+- eu-west-2: MySQL open to 0.0.0.0/0 and a public EBS snapshot; IMDSv2 instance (should pass)
+- Bucket demo-trail-logs for CloudTrail, left with default settings
+- CloudTrail: a single-region trail without validation or KMS, and a multi-region trail not logging
+- KMS: one key without rotation (us-east-1), one with rotation (eu-west-2)
+- RDS: orders-db public and unencrypted (eu-west-2); billing-db private and encrypted
+- Bucket demo-config-delivery (London) for AWS Config, left with default settings
+- GuardDuty and AWS Config switched on in eu-west-2 only

@@ -1,0 +1,1900 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "aws-security-audit",
+          "version": "0.1.0",
+          "rules": [
+            {
+              "id": "cloudtrail-kms-encryption",
+              "name": "CloudtrailKmsEncryption",
+              "shortDescription": {
+                "text": "CloudTrail logs are encrypted with a KMS key"
+              },
+              "fullDescription": {
+                "text": "SSE-KMS adds a second permission check: reading the logs needs kms:Decrypt on the key as well as access to the bucket, and every decrypt is itself logged."
+              },
+              "help": {
+                "text": "Console: CloudTrail > Trails > choose the trail > General details > Edit > Log file SSE-KMS encryption: Enabled, then pick or create a key whose policy lets CloudTrail use it.\n\nCLI: aws cloudtrail update-trail --name <TRAIL> --kms-key-id <KMS_KEY_ARN>"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "cloudtrail",
+                  "CIS-AWS-Foundations-v3.0.0-3.5"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "cloudtrail-log-validation",
+              "name": "CloudtrailLogValidation",
+              "shortDescription": {
+                "text": "CloudTrail log file validation is on"
+              },
+              "fullDescription": {
+                "text": "Validation writes signed digest files, so you can prove later that log files were not altered or deleted."
+              },
+              "help": {
+                "text": "Console: CloudTrail > Trails > choose the trail > General details > Edit > Log file validation: Enabled.\n\nCLI: aws cloudtrail update-trail --name <TRAIL> --enable-log-file-validation"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "cloudtrail",
+                  "CIS-AWS-Foundations-v3.0.0-3.2"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "cloudtrail-multi-region",
+              "name": "CloudtrailMultiRegion",
+              "shortDescription": {
+                "text": "A multi-region CloudTrail trail is logging all management events"
+              },
+              "fullDescription": {
+                "text": "Without a trail covering every region there is no record of who did what, including in regions you do not use, which is exactly where an attacker would go."
+              },
+              "help": {
+                "text": "Console: CloudTrail > Trails > Create trail. Apply it to all regions (the default for new trails), log read and write management events, and send logs to a dedicated S3 bucket. If a trail exists but is stopped, open it and choose Start logging.\n\nCLI: aws cloudtrail create-trail --name <TRAIL> --s3-bucket-name <BUCKET> --is-multi-region-trail --enable-log-file-validation --kms-key-id <KMS_KEY_ARN>\naws cloudtrail start-logging --name <TRAIL>"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "cloudtrail",
+                  "CIS-AWS-Foundations-v3.0.0-3.1"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "config-recorder-enabled",
+              "name": "ConfigRecorderEnabled",
+              "shortDescription": {
+                "text": "AWS Config is recording all resource types in every region"
+              },
+              "fullDescription": {
+                "text": "AWS Config keeps a history of how each resource was configured, which is what you need to answer 'when did this security group open port 22?' during an incident. CIS also expects global resource types (IAM) to be recorded in one region; that part is shown in the evidence but not enforced per region."
+              },
+              "help": {
+                "text": "Console: AWS Config (in the region) > Settings > Edit. Record all resource types, choose a delivery bucket and make sure recording is on.\n\nCLI: aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=<CONFIG_ROLE_ARN> --recording-group allSupported=true,includeGlobalResourceTypes=true\naws configservice put-delivery-channel --delivery-channel name=default,s3BucketName=<BUCKET>\naws configservice start-configuration-recorder --configuration-recorder-name default"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "config",
+                  "CIS-AWS-Foundations-v3.0.0-3.3"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "ec2-default-sg-restricts-traffic",
+              "name": "Ec2DefaultSgRestrictsTraffic",
+              "shortDescription": {
+                "text": "Default security groups have no rules and are not in use"
+              },
+              "fullDescription": {
+                "text": "Anything launched without a chosen security group lands in the VPC's default group. If that group allows traffic, those resources are reachable without anyone deciding they should be. A default group with rules fails (CIS 5.4); one with no rules but attached interfaces gets a low finding."
+              },
+              "help": {
+                "text": "Console: VPC > Security groups > the group named 'default' > remove every inbound and outbound rule. Move any instances or interfaces using it onto purpose-built security groups first.\n\nCLI: aws ec2 describe-security-groups --group-ids <SG_ID>   # copy the rules to revoke\naws ec2 revoke-security-group-ingress --group-id <SG_ID> --ip-permissions '<INBOUND_RULES_JSON>'\naws ec2 revoke-security-group-egress --group-id <SG_ID> --ip-permissions 'IpProtocol=-1,IpRanges=[{CidrIp=0.0.0.0/0}]'\naws ec2 modify-network-interface-attribute --network-interface-id <ENI_ID> --groups <OTHER_SG_ID>"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "ec2",
+                  "CIS-AWS-Foundations-v3.0.0-5.4"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "ec2-ebs-default-encryption",
+              "name": "Ec2EbsDefaultEncryption",
+              "shortDescription": {
+                "text": "EBS encryption by default is on in every region"
+              },
+              "fullDescription": {
+                "text": "With this on, every new EBS volume and snapshot copy in the region is encrypted automatically."
+              },
+              "help": {
+                "text": "Console: EC2 (in the region) > Settings > Data protection and security > EBS encryption > Manage > Enable. Existing volumes are not changed; they need a snapshot, an encrypted copy and a restore.\n\nCLI: aws ec2 enable-ebs-encryption-by-default --region <REGION>"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "ec2",
+                  "CIS-AWS-Foundations-v3.0.0-2.2.1"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "ec2-imdsv2-required",
+              "name": "Ec2Imdsv2Required",
+              "shortDescription": {
+                "text": "EC2 instances require IMDSv2"
+              },
+              "fullDescription": {
+                "text": "IMDSv1 answers plain GET requests, so a server-side request forgery bug in an app on the instance can be used to read the instance role's credentials. IMDSv2 needs a session token."
+              },
+              "help": {
+                "text": "Console: EC2 > Instances > choose the instance > Actions > Instance settings > Modify instance metadata options > IMDSv2: Required. Check that the software on the instance uses a recent AWS SDK first.\n\nCLI: aws ec2 modify-instance-metadata-options --instance-id <INSTANCE_ID> --http-tokens required --http-endpoint enabled"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "ec2",
+                  "CIS-AWS-Foundations-v3.0.0-5.6"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "ec2-public-amis-snapshots",
+              "name": "Ec2PublicAmisSnapshots",
+              "shortDescription": {
+                "text": "No AMIs or EBS snapshots are shared publicly"
+              },
+              "fullDescription": {
+                "text": "A public AMI or snapshot can be copied by any AWS account. Disk images often contain credentials, keys and data that were never meant to leave the account."
+              },
+              "help": {
+                "text": "Console: EC2 > AMIs > choose the AMI > Actions > Edit AMI permissions > Private. EC2 > Snapshots > choose the snapshot > Actions > Snapshot settings > Modify permissions > Private. Then turn on 'Block public access' for AMIs and for EBS snapshots in EC2 > Settings.\n\nCLI: aws ec2 modify-image-attribute --image-id <AMI_ID> --launch-permission 'Remove=[{Group=all}]'\naws ec2 modify-snapshot-attribute --snapshot-id <SNAPSHOT_ID> --attribute createVolumePermission --operation-type remove --group-names all\naws ec2 enable-image-block-public-access --image-block-public-access-state block-new-sharing\naws ec2 enable-snapshot-block-public-access --state block-all-sharing"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "ec2"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "ec2-sg-open-to-internet",
+              "name": "Ec2SgOpenToInternet",
+              "shortDescription": {
+                "text": "No security group opens admin or database ports to the internet"
+              },
+              "fullDescription": {
+                "text": "Inbound rules from 0.0.0.0/0 or ::/0 to SSH, RDP or common database ports invite brute force and exploit attempts within minutes. CIS 5.2/5.3 are attached per finding, only when an admin port is exposed over IPv4 or IPv6 respectively."
+              },
+              "help": {
+                "text": "Console: EC2 > Security Groups > choose the group > Inbound rules > Edit inbound rules. Remove the 0.0.0.0/0 and ::/0 rules for these ports. Reach instances through Systems Manager Session Manager or a VPN, and allow databases only from the application's security group.\n\nCLI: aws ec2 revoke-security-group-ingress --group-id <SG_ID> --ip-permissions 'IpProtocol=tcp,FromPort=<PORT>,ToPort=<PORT>,IpRanges=[{CidrIp=0.0.0.0/0}]'\naws ec2 revoke-security-group-ingress --group-id <SG_ID> --ip-permissions 'IpProtocol=tcp,FromPort=<PORT>,ToPort=<PORT>,Ipv6Ranges=[{CidrIpv6=::/0}]'"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "ec2",
+                  "CIS-AWS-Foundations-v3.0.0-5.2",
+                  "CIS-AWS-Foundations-v3.0.0-5.3"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "guardduty-enabled",
+              "name": "GuarddutyEnabled",
+              "shortDescription": {
+                "text": "GuardDuty is enabled in every region"
+              },
+              "fullDescription": {
+                "text": "GuardDuty watches CloudTrail, VPC flow logs and DNS logs for signs of compromise, such as credentials used from unusual places or instances talking to known bad hosts."
+              },
+              "help": {
+                "text": "Console: GuardDuty (in the region) > Get started > Enable GuardDuty. In an organisation, enable it from a delegated administrator account instead.\n\nCLI: aws guardduty create-detector --enable --region <REGION>"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "guardduty"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "iam-access-key-rotation",
+              "name": "IamAccessKeyRotation",
+              "shortDescription": {
+                "text": "Active access keys are rotated within 90 days"
+              },
+              "fullDescription": {
+                "text": "Long-lived keys build up exposure: the older a key, the more places it may have leaked to."
+              },
+              "help": {
+                "text": "Console: IAM > Users > choose the user > Security credentials. Create a new access key, move every application to it, make the old key inactive, then delete it once nothing breaks.\n\nCLI: aws iam create-access-key --user-name <USER>\naws iam update-access-key --user-name <USER> --access-key-id <OLD_KEY_ID> --status Inactive\naws iam delete-access-key --user-name <USER> --access-key-id <OLD_KEY_ID>"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "iam",
+                  "CIS-AWS-Foundations-v3.0.0-1.14"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "iam-password-policy",
+              "name": "IamPasswordPolicy",
+              "shortDescription": {
+                "text": "Password policy requires 14+ characters and prevents reuse"
+              },
+              "fullDescription": {
+                "text": "Short or reused passwords are easier to guess or to replay from another breach."
+              },
+              "help": {
+                "text": "Console: IAM > Account settings > Password policy > Edit. Set the minimum length to 14 or more and turn on 'Prevent password reuse' with 24 remembered passwords.\n\nCLI: aws iam update-account-password-policy --minimum-password-length 14 --password-reuse-prevention 24 (this call resets any setting you leave out to its default, so include your current settings too)"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "iam",
+                  "CIS-AWS-Foundations-v3.0.0-1.8",
+                  "CIS-AWS-Foundations-v3.0.0-1.9"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "iam-root-access-keys",
+              "name": "IamRootAccessKeys",
+              "shortDescription": {
+                "text": "Root user has no access keys"
+              },
+              "fullDescription": {
+                "text": "Access keys on the root user give unrestricted, unscoped API access to the whole account."
+              },
+              "help": {
+                "text": "Console: Sign in as the root user, open Security credentials from the account menu, and delete every key under Access keys. Use IAM roles for programmatic access instead.\n\nCLI: Root keys can only be removed with root credentials. While signed in as root: aws iam list-access-keys && aws iam delete-access-key --access-key-id <KEY_ID>"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "iam",
+                  "CIS-AWS-Foundations-v3.0.0-1.4"
+                ],
+                "security-severity": "9.5"
+              }
+            },
+            {
+              "id": "iam-root-mfa",
+              "name": "IamRootMfa",
+              "shortDescription": {
+                "text": "Root user has MFA enabled"
+              },
+              "fullDescription": {
+                "text": "Without MFA, the root user is protected by a password alone."
+              },
+              "help": {
+                "text": "Console: Sign in as the root user, open Security credentials from the account menu, and choose Assign MFA device. A hardware key or passkey is the stronger choice.\n\nCLI: Root MFA has to be set up while signed in as the root user; use the console steps."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "iam",
+                  "CIS-AWS-Foundations-v3.0.0-1.5"
+                ],
+                "security-severity": "9.5"
+              }
+            },
+            {
+              "id": "iam-unused-credentials",
+              "name": "IamUnusedCredentials",
+              "shortDescription": {
+                "text": "Credentials unused for 45 days are disabled"
+              },
+              "fullDescription": {
+                "text": "Passwords and keys nobody uses are pure risk: they can still be stolen but nobody would notice."
+              },
+              "help": {
+                "text": "Console: IAM > Users > choose the user > Security credentials. Make unused access keys inactive (then delete them) and remove the console password if the user no longer signs in.\n\nCLI: aws iam update-access-key --user-name <USER> --access-key-id <KEY_ID> --status Inactive\naws iam delete-login-profile --user-name <USER>"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "iam",
+                  "CIS-AWS-Foundations-v3.0.0-1.12"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "iam-user-admin-policy",
+              "name": "IamUserAdminPolicy",
+              "shortDescription": {
+                "text": "No IAM user has full admin attached directly"
+              },
+              "fullDescription": {
+                "text": "Users with AdministratorAccess or a '*:*' policy attached directly are hard to audit and, if their keys leak, give away the whole account."
+              },
+              "help": {
+                "text": "Console: IAM > Users > choose the user > Permissions. Remove the admin policy and grant what the user needs through a group or a role they assume, ideally with MFA required.\n\nCLI: aws iam detach-user-policy --user-name <USER> --policy-arn arn:aws:iam::aws:policy/AdministratorAccess\naws iam delete-user-policy --user-name <USER> --policy-name <INLINE_POLICY>"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "iam"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "iam-user-console-mfa",
+              "name": "IamUserConsoleMfa",
+              "shortDescription": {
+                "text": "IAM users with a console password have MFA"
+              },
+              "fullDescription": {
+                "text": "A console password without MFA can be phished or guessed."
+              },
+              "help": {
+                "text": "Console: IAM > Users > choose the user > Security credentials > Assign MFA device. If the user does not need the console, remove the console password instead.\n\nCLI: aws iam create-virtual-mfa-device --virtual-mfa-device-name <USER> --outfile <USER>-qr.png --bootstrap-method QRCodePNG\naws iam enable-mfa-device --user-name <USER> --serial-number arn:aws:iam::<ACCOUNT_ID>:mfa/<USER> --authentication-code1 <CODE1> --authentication-code2 <CODE2>\nOr, if console access is not needed: aws iam delete-login-profile --user-name <USER>"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "iam",
+                  "CIS-AWS-Foundations-v3.0.0-1.10"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "kms-key-rotation",
+              "name": "KmsKeyRotation",
+              "shortDescription": {
+                "text": "Customer managed KMS keys have automatic rotation on"
+              },
+              "fullDescription": {
+                "text": "Rotation creates new key material on a schedule and keeps the old material for decryption, which limits how much data any one version of the key protects. Only enabled, symmetric, customer managed keys with AWS-generated material support it, so only those are checked."
+              },
+              "help": {
+                "text": "Console: KMS > Customer managed keys > choose the key > Key rotation > tick Automatically rotate this KMS key.\n\nCLI: aws kms enable-key-rotation --key-id <KEY_ID>"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "kms",
+                  "CIS-AWS-Foundations-v3.0.0-3.6"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "rds-public-access",
+              "name": "RdsPublicAccess",
+              "shortDescription": {
+                "text": "RDS instances are not publicly accessible"
+              },
+              "fullDescription": {
+                "text": "A publicly accessible instance gets a public DNS name and IP. Whether it is actually reachable also depends on its security groups and subnet routes, which this check does not evaluate."
+              },
+              "help": {
+                "text": "Console: RDS > Databases > choose the instance > Modify > Connectivity > Additional configuration > Not publicly accessible > Continue > Apply immediately (or in the next maintenance window).\n\nCLI: aws rds modify-db-instance --db-instance-identifier <DB_ID> --no-publicly-accessible --apply-immediately"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "rds",
+                  "CIS-AWS-Foundations-v3.0.0-2.3.3"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "rds-storage-encrypted",
+              "name": "RdsStorageEncrypted",
+              "shortDescription": {
+                "text": "RDS instances have encrypted storage"
+              },
+              "fullDescription": {
+                "text": "Encryption at rest protects the data files, backups, snapshots and read replicas."
+              },
+              "help": {
+                "text": "Console: Encryption cannot be turned on for an existing instance. Take a snapshot, copy it with encryption enabled (RDS > Snapshots > Actions > Copy snapshot), restore a new instance from the encrypted copy, then move traffic over.\n\nCLI: aws rds create-db-snapshot --db-instance-identifier <DB_ID> --db-snapshot-identifier <DB_ID>-plain\naws rds copy-db-snapshot --source-db-snapshot-identifier <DB_ID>-plain --target-db-snapshot-identifier <DB_ID>-encrypted --kms-key-id <KMS_KEY_ID>\naws rds restore-db-instance-from-db-snapshot --db-instance-identifier <NEW_DB_ID> --db-snapshot-identifier <DB_ID>-encrypted"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "rds",
+                  "CIS-AWS-Foundations-v3.0.0-2.3.1"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "s3-account-public-access-block",
+              "name": "S3AccountPublicAccessBlock",
+              "shortDescription": {
+                "text": "S3 Block Public Access is on for the account"
+              },
+              "fullDescription": {
+                "text": "The account-level Block Public Access settings stop any bucket in the account being made public by an ACL or bucket policy, whatever its own settings say."
+              },
+              "help": {
+                "text": "Console: S3 > Block Public Access settings for this account > Edit > tick all four settings > Save.\n\nCLI: aws s3control put-public-access-block --account-id <ACCOUNT_ID> --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "s3",
+                  "CIS-AWS-Foundations-v3.0.0-2.1.4"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "s3-bucket-policy-public",
+              "name": "S3BucketPolicyPublic",
+              "shortDescription": {
+                "text": "No bucket policy allows access to anyone"
+              },
+              "fullDescription": {
+                "text": "A bucket policy statement that allows Principal '*' with no Condition lets anyone on the internet perform the listed actions, unless RestrictPublicBuckets is on."
+              },
+              "help": {
+                "text": "Console: S3 > choose the bucket > Permissions > Bucket policy > Edit. Replace Principal '*' with the accounts or roles that need access, or add a Condition. For a public website, serve it through CloudFront with origin access control instead.\n\nCLI: aws s3api get-bucket-policy --bucket <BUCKET> --query Policy --output text > policy.json\n# edit policy.json, then:\naws s3api put-bucket-policy --bucket <BUCKET> --policy file://policy.json\n# or remove it entirely: aws s3api delete-bucket-policy --bucket <BUCKET>"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "s3"
+                ],
+                "security-severity": "9.5"
+              }
+            },
+            {
+              "id": "s3-bucket-public-access-block",
+              "name": "S3BucketPublicAccessBlock",
+              "shortDescription": {
+                "text": "Each bucket is covered by Block Public Access"
+              },
+              "fullDescription": {
+                "text": "S3 applies the stricter of the bucket and account settings. A bucket passes if, for each of the four settings, either the bucket or the account has it on."
+              },
+              "help": {
+                "text": "Console: S3 > choose the bucket > Permissions > Block public access (bucket settings) > Edit > tick all four.\n\nCLI: aws s3api put-public-access-block --bucket <BUCKET> --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "s3",
+                  "CIS-AWS-Foundations-v3.0.0-2.1.4"
+                ],
+                "security-severity": "5.5"
+              }
+            },
+            {
+              "id": "s3-default-encryption",
+              "name": "S3DefaultEncryption",
+              "shortDescription": {
+                "text": "Buckets have default encryption configured"
+              },
+              "fullDescription": {
+                "text": "Since January 2023 AWS applies SSE-S3 to new buckets automatically, so on current accounts this mostly reports which algorithm each bucket uses. It fails if no default encryption is configured."
+              },
+              "help": {
+                "text": "Console: S3 > choose the bucket > Properties > Default encryption > Edit > choose SSE-S3 or SSE-KMS.\n\nCLI: aws s3api put-bucket-encryption --bucket <BUCKET> --server-side-encryption-configuration '{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"aws:kms\"},\"BucketKeyEnabled\":true}]}'"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "s3"
+                ],
+                "security-severity": "3.0"
+              }
+            },
+            {
+              "id": "s3-versioning-and-logging",
+              "name": "S3VersioningAndLogging",
+              "shortDescription": {
+                "text": "Buckets have versioning and server access logging"
+              },
+              "fullDescription": {
+                "text": "Versioning lets you recover objects that were overwritten or deleted, including by ransomware or a bad script. Server access logs record who requested what. Each bucket gets one finding for versioning and one for logging."
+              },
+              "help": {
+                "text": "Console: S3 > choose the bucket > Properties > Bucket Versioning > Edit > Enable.\nS3 > choose the bucket > Properties > Server access logging > Edit > Enable, and pick a separate log bucket. Do not log a bucket into itself.\n\nCLI: aws s3api put-bucket-versioning --bucket <BUCKET> --versioning-configuration Status=Enabled\naws s3api put-bucket-logging --bucket <BUCKET> --bucket-logging-status '{\"LoggingEnabled\":{\"TargetBucket\":\"<LOG_BUCKET>\",\"TargetPrefix\":\"<BUCKET>/\"}}'"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "aws",
+                  "s3"
+                ],
+                "security-severity": "3.0"
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "startTimeUtc": "2026-08-10T22:57:53.526187+00:00",
+          "endTimeUtc": "2026-08-10T22:57:54.183220+00:00",
+          "toolExecutionNotifications": []
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "iam-root-mfa",
+          "level": "error",
+          "message": {
+            "text": "MFA is not enabled for the root user"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "critical",
+            "region": "global",
+            "cis": [
+              "1.5"
+            ],
+            "evidence": {
+              "AccountMFAEnabled": 0
+            }
+          },
+          "ruleIndex": 13
+        },
+        {
+          "ruleId": "s3-bucket-policy-public",
+          "level": "error",
+          "message": {
+            "text": "Bucket demo-public-assets policy allows access to anyone (Principal '*')"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-public-assets",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "critical",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "public_statements": [
+                {
+                  "sid": "PublicRead",
+                  "actions": [
+                    "s3:GetObject"
+                  ],
+                  "resources": [
+                    "arn:aws:s3:::demo-public-assets/*"
+                  ]
+                }
+              ],
+              "restrict_public_buckets": false
+            }
+          },
+          "ruleIndex": 21
+        },
+        {
+          "ruleId": "cloudtrail-multi-region",
+          "level": "error",
+          "message": {
+            "text": "No multi-region trail is fully logging management events (org-audit: logging is stopped)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "global",
+            "cis": [
+              "3.1"
+            ],
+            "evidence": {
+              "multi_region_trails": [
+                "org-audit"
+              ],
+              "problems": {
+                "org-audit": [
+                  "logging is stopped"
+                ]
+              }
+            }
+          },
+          "ruleIndex": 2
+        },
+        {
+          "ruleId": "ec2-public-amis-snapshots",
+          "level": "error",
+          "message": {
+            "text": "EBS snapshot snap-41765208fbfae3989 is public"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:ec2:eu-west-2::snapshot/snap-41765208fbfae3989",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {
+              "volume_id": "vol-6f014221cc70c2721",
+              "encrypted": false
+            }
+          },
+          "ruleIndex": 7
+        },
+        {
+          "ruleId": "ec2-public-amis-snapshots",
+          "level": "error",
+          "message": {
+            "text": "AMI ami-31308d8f087a55aa3 (demo-golden-image) is public"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:ec2:us-east-1::image/ami-31308d8f087a55aa3",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "public": true
+            }
+          },
+          "ruleIndex": 7
+        },
+        {
+          "ruleId": "ec2-sg-open-to-internet",
+          "level": "error",
+          "message": {
+            "text": "Security group sg-b3efeebac5e70869f (reporting-db) allows MySQL/MariaDB (3306) from 0.0.0.0/0"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:ec2:eu-west-2:123456789012:security-group/sg-b3efeebac5e70869f",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {
+              "vpc_id": "vpc-4fc78db3064fee8be",
+              "exposures": [
+                {
+                  "port": 3306,
+                  "service": "MySQL/MariaDB",
+                  "source": "0.0.0.0/0",
+                  "admin": false
+                }
+              ]
+            }
+          },
+          "ruleIndex": 8
+        },
+        {
+          "ruleId": "ec2-sg-open-to-internet",
+          "level": "error",
+          "message": {
+            "text": "Security group sg-1d0ccbc04c79480e8 (legacy-admin) allows SSH (22) from 0.0.0.0/0, RDP (3389) from ::/0"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-1d0ccbc04c79480e8",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "us-east-1",
+            "cis": [
+              "5.2",
+              "5.3"
+            ],
+            "evidence": {
+              "vpc_id": "vpc-a0fb21613cae115bc",
+              "exposures": [
+                {
+                  "port": 22,
+                  "service": "SSH",
+                  "source": "0.0.0.0/0",
+                  "admin": true
+                },
+                {
+                  "port": 3389,
+                  "service": "RDP",
+                  "source": "::/0",
+                  "admin": true
+                }
+              ]
+            }
+          },
+          "ruleIndex": 8
+        },
+        {
+          "ruleId": "iam-user-admin-policy",
+          "level": "error",
+          "message": {
+            "text": "User deploy-bot has full admin attached directly: ci-deploy-everything (customer managed, allows *:*)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:user/deploy-bot",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "global",
+            "cis": [],
+            "evidence": {
+              "policies": [
+                "ci-deploy-everything (customer managed, allows *:*)"
+              ]
+            }
+          },
+          "ruleIndex": 15
+        },
+        {
+          "ruleId": "iam-user-console-mfa",
+          "level": "error",
+          "message": {
+            "text": "User alice has a console password but no MFA device"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:user/alice",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "global",
+            "cis": [
+              "1.10"
+            ],
+            "evidence": {
+              "password_enabled": true,
+              "mfa_active": false,
+              "password_last_used": "no_information"
+            }
+          },
+          "ruleIndex": 16
+        },
+        {
+          "ruleId": "rds-public-access",
+          "level": "error",
+          "message": {
+            "text": "RDS instance orders-db is publicly accessible"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:rds:eu-west-2:123456789012:db:orders-db",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "eu-west-2",
+            "cis": [
+              "2.3.3"
+            ],
+            "evidence": {
+              "engine": "postgres",
+              "endpoint": "orders-db.aaaaaaaaaa.eu-west-2.rds.amazonaws.com"
+            }
+          },
+          "ruleIndex": 18
+        },
+        {
+          "ruleId": "s3-account-public-access-block",
+          "level": "error",
+          "message": {
+            "text": "Account-level Block Public Access is not fully on (off: BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "high",
+            "region": "global",
+            "cis": [
+              "2.1.4"
+            ],
+            "evidence": {
+              "BlockPublicAcls": false,
+              "IgnorePublicAcls": false,
+              "BlockPublicPolicy": false,
+              "RestrictPublicBuckets": false
+            }
+          },
+          "ruleIndex": 20
+        },
+        {
+          "ruleId": "cloudtrail-kms-encryption",
+          "level": "warning",
+          "message": {
+            "text": "Trail app-trail logs are not encrypted with a KMS key"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:cloudtrail:us-east-1:123456789012:trail/app-trail",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "3.5"
+            ],
+            "evidence": {
+              "KmsKeyId": null
+            }
+          },
+          "ruleIndex": 0
+        },
+        {
+          "ruleId": "cloudtrail-kms-encryption",
+          "level": "warning",
+          "message": {
+            "text": "Trail org-audit logs are not encrypted with a KMS key"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:cloudtrail:us-east-1:123456789012:trail/org-audit",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "3.5"
+            ],
+            "evidence": {
+              "KmsKeyId": null
+            }
+          },
+          "ruleIndex": 0
+        },
+        {
+          "ruleId": "cloudtrail-log-validation",
+          "level": "warning",
+          "message": {
+            "text": "Trail app-trail has log file validation off"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:cloudtrail:us-east-1:123456789012:trail/app-trail",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "3.2"
+            ],
+            "evidence": {
+              "LogFileValidationEnabled": false
+            }
+          },
+          "ruleIndex": 1
+        },
+        {
+          "ruleId": "cloudtrail-log-validation",
+          "level": "warning",
+          "message": {
+            "text": "Trail org-audit has log file validation off"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:cloudtrail:us-east-1:123456789012:trail/org-audit",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "3.2"
+            ],
+            "evidence": {
+              "LogFileValidationEnabled": false
+            }
+          },
+          "ruleIndex": 1
+        },
+        {
+          "ruleId": "config-recorder-enabled",
+          "level": "warning",
+          "message": {
+            "text": "AWS Config has no configuration recorder in us-east-1"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "3.3"
+            ],
+            "evidence": {
+              "recorders": 0
+            }
+          },
+          "ruleIndex": 3
+        },
+        {
+          "ruleId": "ec2-default-sg-restricts-traffic",
+          "level": "warning",
+          "message": {
+            "text": "Default security group sg-41660da435c082039 in vpc-4fc78db3064fee8be has 0 inbound and 1 outbound rule(s)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:ec2:eu-west-2:123456789012:security-group/sg-41660da435c082039",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "eu-west-2",
+            "cis": [
+              "5.4"
+            ],
+            "evidence": {
+              "vpc_id": "vpc-4fc78db3064fee8be",
+              "inbound_rules": 0,
+              "outbound_rules": 1,
+              "attached_network_interfaces": 0
+            }
+          },
+          "ruleIndex": 4
+        },
+        {
+          "ruleId": "ec2-default-sg-restricts-traffic",
+          "level": "warning",
+          "message": {
+            "text": "Default security group sg-b887ec90f290373d0 in vpc-a0fb21613cae115bc has 0 inbound and 1 outbound rule(s)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-b887ec90f290373d0",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "5.4"
+            ],
+            "evidence": {
+              "vpc_id": "vpc-a0fb21613cae115bc",
+              "inbound_rules": 0,
+              "outbound_rules": 1,
+              "attached_network_interfaces": 0
+            }
+          },
+          "ruleIndex": 4
+        },
+        {
+          "ruleId": "ec2-ebs-default-encryption",
+          "level": "warning",
+          "message": {
+            "text": "EBS encryption by default is off in us-east-1"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "2.2.1"
+            ],
+            "evidence": {
+              "EbsEncryptionByDefault": false
+            }
+          },
+          "ruleIndex": 5
+        },
+        {
+          "ruleId": "ec2-imdsv2-required",
+          "level": "warning",
+          "message": {
+            "text": "Instance i-a521458e3c6990566 still accepts IMDSv1 requests"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:ec2:us-east-1:123456789012:instance/i-a521458e3c6990566",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "5.6"
+            ],
+            "evidence": {
+              "state": "running",
+              "http_tokens": "optional",
+              "http_endpoint": "enabled"
+            }
+          },
+          "ruleIndex": 6
+        },
+        {
+          "ruleId": "guardduty-enabled",
+          "level": "warning",
+          "message": {
+            "text": "GuardDuty is not enabled in us-east-1"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "detectors": 0
+            }
+          },
+          "ruleIndex": 9
+        },
+        {
+          "ruleId": "iam-password-policy",
+          "level": "warning",
+          "message": {
+            "text": "Minimum password length is 8, below 14"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "global",
+            "cis": [
+              "1.8"
+            ],
+            "evidence": {
+              "MinimumPasswordLength": 8
+            }
+          },
+          "ruleIndex": 11
+        },
+        {
+          "ruleId": "iam-password-policy",
+          "level": "warning",
+          "message": {
+            "text": "The password policy does not prevent password reuse"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:iam::123456789012:root",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "global",
+            "cis": [
+              "1.9"
+            ],
+            "evidence": {
+              "PasswordReusePrevention": 0
+            }
+          },
+          "ruleIndex": 11
+        },
+        {
+          "ruleId": "kms-key-rotation",
+          "level": "warning",
+          "message": {
+            "text": "KMS key d17d5b03-c341-4945-ad91-ac0e8a921689 does not have automatic rotation on"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:kms:us-east-1:123456789012:key/d17d5b03-c341-4945-ad91-ac0e8a921689",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "3.6"
+            ],
+            "evidence": {
+              "KeyRotationEnabled": false,
+              "description": "demo app data key"
+            }
+          },
+          "ruleIndex": 17
+        },
+        {
+          "ruleId": "rds-storage-encrypted",
+          "level": "warning",
+          "message": {
+            "text": "RDS instance orders-db storage is not encrypted"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:rds:eu-west-2:123456789012:db:orders-db",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "eu-west-2",
+            "cis": [
+              "2.3.1"
+            ],
+            "evidence": {
+              "engine": "postgres",
+              "kms_key_id": null
+            }
+          },
+          "ruleIndex": 19
+        },
+        {
+          "ruleId": "s3-bucket-public-access-block",
+          "level": "warning",
+          "message": {
+            "text": "Bucket demo-config-delivery is not fully covered by Block Public Access (off: BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-config-delivery",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "eu-west-2",
+            "cis": [
+              "2.1.4"
+            ],
+            "evidence": {
+              "bucket_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              },
+              "account_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              }
+            }
+          },
+          "ruleIndex": 22
+        },
+        {
+          "ruleId": "s3-bucket-public-access-block",
+          "level": "warning",
+          "message": {
+            "text": "Bucket demo-customer-exports is not fully covered by Block Public Access (off: BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-customer-exports",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "eu-west-2",
+            "cis": [
+              "2.1.4"
+            ],
+            "evidence": {
+              "bucket_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              },
+              "account_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              }
+            }
+          },
+          "ruleIndex": 22
+        },
+        {
+          "ruleId": "s3-bucket-public-access-block",
+          "level": "warning",
+          "message": {
+            "text": "Bucket demo-public-assets is not fully covered by Block Public Access (off: BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-public-assets",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "2.1.4"
+            ],
+            "evidence": {
+              "bucket_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              },
+              "account_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              }
+            }
+          },
+          "ruleIndex": 22
+        },
+        {
+          "ruleId": "s3-bucket-public-access-block",
+          "level": "warning",
+          "message": {
+            "text": "Bucket demo-trail-logs is not fully covered by Block Public Access (off: BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-trail-logs",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "medium",
+            "region": "us-east-1",
+            "cis": [
+              "2.1.4"
+            ],
+            "evidence": {
+              "bucket_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              },
+              "account_settings": {
+                "BlockPublicAcls": false,
+                "IgnorePublicAcls": false,
+                "BlockPublicPolicy": false,
+                "RestrictPublicBuckets": false
+              }
+            }
+          },
+          "ruleIndex": 22
+        },
+        {
+          "ruleId": "s3-default-encryption",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-config-delivery has no default encryption configured"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-config-delivery",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {}
+          },
+          "ruleIndex": 23
+        },
+        {
+          "ruleId": "s3-default-encryption",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-customer-exports has no default encryption configured"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-customer-exports",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {}
+          },
+          "ruleIndex": 23
+        },
+        {
+          "ruleId": "s3-default-encryption",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-public-assets has no default encryption configured"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-public-assets",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {}
+          },
+          "ruleIndex": 23
+        },
+        {
+          "ruleId": "s3-default-encryption",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-trail-logs has no default encryption configured"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-trail-logs",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {}
+          },
+          "ruleIndex": 23
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-config-delivery does not have server access logging enabled"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-config-delivery",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {
+              "logging": "disabled"
+            }
+          },
+          "ruleIndex": 24
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-config-delivery does not have versioning enabled (never enabled)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-config-delivery",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {
+              "versioning": "never enabled",
+              "mfa_delete": "Disabled"
+            }
+          },
+          "ruleIndex": 24
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-customer-exports does not have server access logging enabled"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-customer-exports",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {
+              "logging": "disabled"
+            }
+          },
+          "ruleIndex": 24
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-customer-exports does not have versioning enabled (never enabled)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-customer-exports",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "eu-west-2",
+            "cis": [],
+            "evidence": {
+              "versioning": "never enabled",
+              "mfa_delete": "Disabled"
+            }
+          },
+          "ruleIndex": 24
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-access-logs does not have server access logging enabled"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-access-logs",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "logging": "disabled"
+            }
+          },
+          "ruleIndex": 24,
+          "suppressions": [
+            {
+              "kind": "external",
+              "justification": "Target bucket for the other buckets' access logs; logging it into itself would loop. (until 2027-04-18)"
+            }
+          ]
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-public-assets does not have server access logging enabled"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-public-assets",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "logging": "disabled"
+            }
+          },
+          "ruleIndex": 24
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-public-assets does not have versioning enabled (never enabled)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-public-assets",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "versioning": "never enabled",
+              "mfa_delete": "Disabled"
+            }
+          },
+          "ruleIndex": 24
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-trail-logs does not have server access logging enabled"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-trail-logs",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "logging": "disabled"
+            }
+          },
+          "ruleIndex": 24
+        },
+        {
+          "ruleId": "s3-versioning-and-logging",
+          "level": "note",
+          "message": {
+            "text": "Bucket demo-trail-logs does not have versioning enabled (never enabled)"
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "arn:aws:s3:::demo-trail-logs",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "severity": "low",
+            "region": "us-east-1",
+            "cis": [],
+            "evidence": {
+              "versioning": "never enabled",
+              "mfa_delete": "Disabled"
+            }
+          },
+          "ruleIndex": 24
+        }
+      ],
+      "properties": {
+        "account_id": "123456789012",
+        "regions": [
+          "eu-west-2",
+          "us-east-1"
+        ],
+        "note": "Generated by 'aws-security-audit demo' against a moto mock account (123456789012). This is not a real AWS account and no real AWS API calls were made.",
+        "warnings": []
+      }
+    }
+  ]
+}
