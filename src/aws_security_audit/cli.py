@@ -11,6 +11,7 @@ import boto3
 import typer
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError, ProfileNotFound
 from rich.console import Console
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from . import __version__
@@ -21,7 +22,7 @@ from .output import console as console_output
 from .output import csv_report, html_report, json_report, sarif
 from .regions import resolve_regions
 from .registry import all_checks, select_checks
-from .runner import ScanResult, run_scan
+from .runner import ScanResult, plan, run_scan
 from .suppressions import SuppressionError
 from .suppressions import apply as apply_suppressions
 from .suppressions import load as load_suppressions
@@ -162,7 +163,18 @@ def scan(
 
     regions, warnings = resolve_regions(scan_ctx, region)
     err.print(f"Scanning account {scan_ctx.account_id} with {len(checks)} checks in {len(regions)} region(s)...")
-    result = run_scan(scan_ctx, checks, regions, max_workers=workers)
+    # A progress bar on stderr, only when it is a terminal, so piped output stays clean.
+    with Progress(
+        TextColumn("Running checks"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=err,
+        transient=True,
+        disable=not err.is_terminal,
+    ) as progress:
+        task = progress.add_task("checks", total=len(plan(checks, regions)))
+        result = run_scan(scan_ctx, checks, regions, max_workers=workers, on_progress=lambda _: progress.advance(task))
     result.warnings.extend(warnings)
     result.warnings.extend(suppression_warnings)
     result.warnings.extend(apply_suppressions(result.findings, accepted, {spec.id for spec in checks}))
