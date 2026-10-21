@@ -317,3 +317,7 @@ at `/dev/null`, so tests cannot pick up a real profile.
 - A `diff` command comparing two JSON reports, to show what changed between
   scans.
 - Parallelise per-bucket S3 calls.
+
+---
+
+Developed locally in July to August 2026 and published to GitHub in October 2026.
